@@ -91,3 +91,4 @@ class ClinicInfoResponse(BaseModel):
     opening_time: str
     closing_time: str
     appointment_duration_minutes: int
+

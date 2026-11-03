@@ -145,3 +145,4 @@ def test_cancel_appointment(test_db, mock_calendar):
     # Check slot is now available again
     res = service.check_availability("DOC-TEST-1", "2026-11-03", "11:30")
     assert res.requested_time_available is True
+

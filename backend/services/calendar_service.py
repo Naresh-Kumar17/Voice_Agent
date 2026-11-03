@@ -247,3 +247,4 @@ def get_calendar_service() -> BaseCalendarService:
     if _google_calendar_instance is None:
         _google_calendar_instance = GoogleCalendarService()
     return _google_calendar_instance
+

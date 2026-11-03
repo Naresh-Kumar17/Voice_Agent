@@ -177,3 +177,4 @@ class AuditRepository:
         self.db.add(audit)
         self.db.commit()
         return audit
+

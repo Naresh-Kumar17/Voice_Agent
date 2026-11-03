@@ -106,3 +106,4 @@ def test_multiturn_booking_flow(test_db):
     assert "confirmed" in r4.lower()
     assert mgr.state_mgr.state == ConversationState.BOOKED
     assert mgr.state_mgr.slots.appointment_id is not None
+

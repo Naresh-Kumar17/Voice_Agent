@@ -142,3 +142,4 @@ def verify_booking_hallucination(agent_utterance: str, has_confirmed_booking: bo
                 "Would you like me to go ahead and confirm this appointment for you?"
             )
     return agent_utterance
+

@@ -75,3 +75,4 @@ def init_db() -> None:
             ]
             db.add_all(doctors)
             db.commit()
+

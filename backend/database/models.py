@@ -170,3 +170,4 @@ class AuditLog(Base):
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=utc_now, index=True)
     result: Mapped[str] = mapped_column(String(32), default="SUCCESS")
     metadata_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+

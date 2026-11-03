@@ -221,3 +221,4 @@ class ConversationManager:
 
         # Fallback response
         return "How else may I assist you with your appointment today?"
+

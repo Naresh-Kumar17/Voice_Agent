@@ -314,3 +314,4 @@ def reschedule_appointment(
     finally:
         if own_session:
             db.close()
+

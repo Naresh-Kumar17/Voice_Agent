@@ -124,3 +124,4 @@ def test_booking_workflow_lifecycle(test_db):
     # 5. Verify cancelled status
     check_cancelled = get_appointment(appointment_id=apt_id, db=test_db)
     assert check_cancelled["status"] == "CANCELLED"
+
