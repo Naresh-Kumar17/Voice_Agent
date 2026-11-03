@@ -47,11 +47,15 @@ DIAGNOSIS_KEYWORDS = [
 
 PRIVACY_KEYWORDS = [
     r"\bother patient\b",
+    r"\bsomeone else\b",
+    r"\banyone else\b",
     r"\bsomeone else's appointment\b",
     r"\banother patient\b",
+    r"\bneighbor\b",
     r"\bwho is visiting\b",
     r"\bpatient list\b",
     r"\bmedical history of\b",
+    r"\bif .+ has an appointment\b",
 ]
 
 EMERGENCY_RESPONSE = (
