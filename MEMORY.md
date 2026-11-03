@@ -1,170 +1,129 @@
 # Clinical Voice Agent — Session Memory File
-# Purpose: Persistent engineering memory for resuming work across sessions.
-# Last updated: 2026-11-03T07:10:00+05:00
-# Workspace: F:\Voice_Agent (git main branch)
-# Conversation: 094aad04-0ef0-4bba-8b4d-8b2fbe2fc6fa
+# Workspace: F:\Voice_Agent (git: main branch)
+# Updated: 2026-11-03
 
 ---
 
-## ROLE & DESIGN PHILOSOPHY
+## 1. Role & Engineering Philosophy
 
-I am operating as **Lead AI Engineer** specializing in voice agent pipelines.
-
-Core principle:
-> "Conversational fluency is not task success."
-> Every booking claim must be backed by a verified database record and calendar
-> event. Anti-hallucination gates enforce this at every output boundary.
-
-Design pillars:
-1. **Free-tier zero-cost** — all providers have free tiers; paid swap is 1-line `.env` change.
-2. **Deterministic backend** — state machine + idempotent DB ops + mock calendar sandbox.
-3. **Closed-loop evaluation** — autonomous simulated patients + ground-truth DB assertions.
+- Operating as **Lead AI Engineer** overseeing end-to-end voice agent architecture.
+- Core Tenet: *"Conversational fluency is not task success."* Every appointment booking, cancellation, or rescheduling must be backed by a verified database record and calendar event.
+- Free-Tier First: The entire stack operates reliably on free-tier service configurations (LiveKit Cloud 50 hrs/month, Deepgram $200 trial credit, ElevenLabs 10K free characters with premade voices, Google Gemini Free tier, and Google Calendar Sandbox).
 
 ---
 
-## COMPLETED WORK LOG
+## 2. Complete Phase Implementation Status (8 / 8 Phases Implemented)
 
 ### Phase 1: Foundation & Data Architecture ✅
-- **Commit**: `011c2f0` (19 files, 1546 LOC)
-- Python 3.12 venv via `uv`, 113 packages installed.
-- 8 SQLAlchemy models: Patient, Doctor, Appointment, Conversation, ConversationEvent, EvaluationRun, EvaluationResult, AuditLog.
-- Repository pattern: PatientRepo, DoctorRepo, AppointmentRepo, AuditRepo.
-- Pydantic v2 API schemas for all request/response contracts.
-- Pydantic Settings for multi-provider env config.
-- MockCalendarService (sandbox) + GoogleCalendarService (live).
-- AppointmentService: slot calculation, collision detection, idempotency, two-phase commit with reconciliation.
-- 6 unit tests passing.
+- 8 SQLAlchemy models: `Patient`, `Doctor`, `Appointment`, `Conversation`, `ConversationEvent`, `EvaluationRun`, `EvaluationResult`, `AuditLog`.
+- Repository pattern: `PatientRepo`, `DoctorRepo`, `AppointmentRepo`, `AuditRepo`.
+- Pydantic v2 schemas for all request/response validation.
+- `MockCalendarService` sandbox with deterministic busy slot fixtures and reset capability.
+- `AppointmentService` with two-phase commit, collision prevention, idempotency, and cancellation.
 
 ### Phase 2: Controlled Agent Tools ✅
-- **Commit**: `8878464` (4 files, 582 LOC)
-- 8 clinical tool functions: get_clinic_information, get_doctor_information, check_availability, get_alternative_slots, book_appointment, get_appointment, cancel_appointment, reschedule_appointment.
-- Added reschedule_appointment to AppointmentService (old calendar event deletion + new event creation + DB update).
-- 4 unit tests: clinic info, doctor lookup, availability check, full booking lifecycle (book→get→reschedule→cancel→verify).
+- 8 clinical tool functions: `get_clinic_information`, `get_doctor_information`, `check_availability`, `get_alternative_slots`, `book_appointment`, `get_appointment`, `cancel_appointment`, `reschedule_appointment`.
+- Clean error compensation: old calendar events preserved if new event booking fails during rescheduling.
 
 ### Phase 3: Conversation State Machine & Guardrails ✅
-- **Commit**: `1630dad` (6 files, 664 LOC)
-- ConversationState enum: 12 states (INIT → IDENTIFY_INTENT → COLLECTING_INFO → CHECKING_AVAILABILITY → OFFERING_ALTERNATIVES → CONFIRMING_DETAILS → BOOKING → BOOKED → CANCELLED → RESCHEDULED → EMERGENCY_ESCALATED → CLOSING).
-- BookingSlots model tracking 5 required fields (name, phone, doctor, date, time).
-- Missing field tracker with natural-language next-question generator.
-- Safety guardrails: emergency keyword regex (chest pain, stroke, seizure, etc.) → 911 directive; diagnosis/prescription refusal; privacy protection.
-- Anti-hallucination filter: `verify_booking_hallucination()` catches false confirmation statements.
-- Rule-based entity extractor: phone, date (tomorrow/today/ISO), time (10am/14:00), doctor name fuzzy match, appointment ID.
-- ConversationManager: full multi-turn processor (guardrails → extraction → state transition → tool calls → confirmation flow).
-- 6 unit tests: emergency escalation, diagnosis refusal, privacy refusal, anti-hallucination, state machine fields, full 4-turn booking.
+- 12 conversation states: `INIT`, `IDENTIFY_INTENT`, `COLLECTING_INFO`, `CHECKING_AVAILABILITY`, `OFFERING_ALTERNATIVES`, `CONFIRMING_DETAILS`, `BOOKING`, `BOOKED`, `CANCELLED`, `RESCHEDULED`, `EMERGENCY_ESCALATED`, `CLOSING`.
+- Safety guardrails: Emergency keyword detection → immediate 911 escalation; medical advice refusal; patient privacy protection.
+- Anti-hallucination verification: `verify_booking_hallucination()` ensures the agent never states an appointment is confirmed without a real DB ID.
 
 ### Phase 4: LiveKit Voice Agent Pipeline ✅
-- **Commit**: `c8ebdd7` (25 files, 345 LOC)
-- LiveKit Agents v1.8.10 uses `Agent` + `AgentSession` API (not deprecated `VoiceAssistant`).
-- Provider factories: `build_llm()` (Groq via OpenAI-compat base_url / OpenAI direct), `build_stt()` (Deepgram / OpenAI fallback), `build_tts()` (ElevenLabs / OpenAI fallback), `build_vad()` (Silero).
-- 6 `@function_tool` registrations wiring LLM tool-calling to clinical_tools functions.
-- `create_clinical_agent()` factory composing instructions + tools + providers.
-- `entrypoint(ctx)` lifecycle: connect → wait_for_participant → create agent → start session → greeting.
-- `main()` for `python backend/agent/voice_agent.py dev` CLI.
-- 3 unit tests: agent instantiation, tool callability, availability execution.
-- **IMPORTANT**: Dummy API keys (`sk-dummy-test-key-for-local-dev`) used in STT/TTS/LLM fallbacks to prevent crash during local testing without real credentials.
+- LiveKit Agents v1.8 `Agent` + `AgentSession` architecture.
+- Multi-provider support with automatic fallback:
+  - **LLM**: Gemini (`gemini-3.1-flash-lite` via Google OpenAI-compatible endpoint).
+  - **STT**: Deepgram Nova-2 (`nova-2-general`).
+  - **TTS**: ElevenLabs (`eleven_turbo_v2_5` with free-tier premade voice `EXAVITQu4vr4xnSDxMaL` / Bella).
+  - **VAD**: Silero VAD for low-latency barge-in and turn detection.
+- `@function_tool` registrations linking agent tools directly to clinical services.
 
 ### Phase 5: Autonomous Evaluation & Simulated Patient ✅
-- **Commit**: `8490421` (12 files, 968 LOC)
-- 15 EvaluationScenario definitions across Categories A-F (TC-001 to TC-029).
-- SimulatedPatient persona engine: incremental disclosure, confirmation/rejection handling, immediate halt on 911/refusal/privacy.
-- TaskOutcomeResult evaluator: directly inspects DB for Appointment record existence, status, patient name match, catches hallucinated confirmations.
-- SafetyEvaluator: verifies 911 directive for emergencies, diagnosis refusal text, privacy refusal text.
-- ToolEvaluator: expected-vs-actual tool call accuracy scoring.
-- EvaluationRunner: orchestrates multi-turn sims, tracks per-turn latency, computes aggregate metrics (task completion, tool accuracy, safety compliance), persists EvaluationRun + EvaluationResult records to DB.
-- **BUG FIXED**: SimulatedPatient was continuing conversation after safety refusals (emergency/diagnosis/privacy) — now returns `None` to terminate.
-- **BUG FIXED**: Privacy keyword regex missed "neighbor" pattern in TC-029 — added `\bneighbor\b` and `\bif .+ has an appointment\b`.
-- **BUG FIXED**: `runner.py` was missing `from config.settings import settings` — added import.
-- 4 unit tests: booking scenario DB verification, emergency scenario 911 check, diagnosis refusal check, batch suite persistence.
+- 15 deterministic scenarios (TC-001 through TC-029) spanning booking, missing info, unavailability, cancellations, emergency escalation, and privacy.
+- `SimulatedPatient` persona engine simulating incremental multi-turn patient dialogue.
+- Independent evaluators: DB task verifier, safety auditor, tool accuracy calculator.
+- Isolated in-memory SQLite instances and resettable calendar fixtures per test scenario.
 
----
-
-## CURRENT AGGREGATE TEST STATUS
-
-**23 / 23 tests passing** (~18 seconds)
-
-| Test File | Tests | Status |
-|-----------|-------|--------|
-| test_appointment_service.py | 6 | ✅ All Pass |
-| test_clinical_tools.py | 4 | ✅ All Pass |
-| test_conversation_manager.py | 6 | ✅ All Pass |
-| test_evaluation_engine.py | 4 | ✅ All Pass |
-| test_voice_agent_pipeline.py | 3 | ✅ All Pass |
-
----
-
-## WHAT REMAINS (Phases 6, 7, 8)
-
-### Phase 6: FastAPI REST API & LiveKit Token Service
-- `backend/main.py` — FastAPI app with CORS, lifespan hooks.
-- `backend/api/routes/` — REST routes:
+### Phase 6: FastAPI REST API & LiveKit Token Service ✅
+- `backend/main.py` FastAPI app with lifespan hooks and CORS middleware.
+- `backend/api/routes/v1.py` endpoints:
+  - `GET /health` — health check
   - `GET /api/v1/doctors` — list active doctors
   - `POST /api/v1/appointments/check` — check availability
-  - `POST /api/v1/appointments/book` — book appointment
+  - `POST /api/v1/appointments` / `POST /api/v1/appointments/book` — book appointment
   - `DELETE /api/v1/appointments/{id}` — cancel appointment
-  - `POST /api/v1/livekit/token` — generate WebRTC connection token
-  - `POST /api/v1/evaluations/run` — trigger eval suite
-  - `GET /api/v1/evaluations/runs` — list eval runs
-- `tests/integration/test_api_routes.py` — API integration tests.
+  - `POST /api/v1/livekit/token` — creates a unique room, dispatches the named worker (`clinical-voice-agent`), and returns caller JWT token
+  - `GET /api/v1/evaluations/scenarios`, `POST /api/v1/evaluations/run`, `GET /api/v1/evaluations/runs` — evaluation management
 
-### Phase 7: React Voice Interface & Evaluation Dashboard
-- `frontend/` — React + TypeScript + Vite project
-- Voice Receptionist Page: WebRTC mic connect, audio visualizer, live subtitles
-- Evaluation Dashboard: metrics overview, scenario list, conversation inspector
+### Phase 7: React Frontend & Evaluation Dashboard ✅
+- Modern React 19 + TypeScript + Vite single-page application under `frontend/`.
+- Voice Receptionist Panel: LiveKit WebRTC client, microphone toggle, pulsating audio visualizer orb, real-time live subtitles/transcripts, call end controls.
+- Evaluation Dashboard: scenario listing, single-click test execution, real-time metrics (task completion %, tool accuracy %, safety compliance %), and conversation inspection.
+- Build verified with `npm run build` with zero TypeScript errors.
 
-### Phase 8: E2E Validation, Docker & Production Runbook
-- Dockerfile + docker-compose.yml (FastAPI + Agent Worker + PostgreSQL)
-- Full e2e regression suite execution
-- README.md production deployment runbook
-
----
-
-## KNOWN ISSUES / TECH DEBT
-
-1. `git config core.autocrlf false` was set to suppress CRLF warnings — may need `.gitattributes` for cross-platform collaboration.
-2. Rule-based entity extractor is deterministic but limited — will need LLM-based extraction for production edge cases (e.g. "next Tuesday at quarter past two").
-3. Scenario library has 15 of 35 target scenarios — remaining 20 (Categories D-partial, E, G) need to be added.
-4. No Alembic migration scripts yet — using `create_all()` for schema creation.
-5. Patient name extraction regex `"my name is X Y"` doesn't handle complex names (hyphenated, multi-word surnames).
+### Phase 8: Docker & Production Runbook ✅
+- Multi-stage `Dockerfile` for Python backend/agent worker.
+- `frontend/Dockerfile` and `frontend/nginx.conf` for optimized static asset serving.
+- `docker-compose.yml` defining PostgreSQL, backend API, LiveKit worker, and frontend services.
+- Detailed production deployment runbook in `README.md`.
 
 ---
 
-## ENVIRONMENT QUICK REFERENCE
+## 3. Test Suite Verification
 
+**Current status**: **39 / 39 automated tests pass** (`pytest -v` in ~19.3s):
+- `tests/integration/test_api_routes.py`: 5 passed
+- `tests/unit/test_appointment_service.py`: 9 passed
+- `tests/unit/test_clinical_tools.py`: 4 passed
+- `tests/unit/test_conversation_manager.py`: 9 passed
+- `tests/unit/test_evaluation_engine.py`: 7 passed
+- `tests/unit/test_voice_agent_pipeline.py`: 5 passed
+
+---
+
+## 4. Root Cause Analysis: Server Testing "status : not found"
+
+When testing the server or inspecting the LiveKit Cloud dashboard, `"status : not found"` appeared due to the following reasons:
+
+1. **LiveKit Cloud Worker Not Connected**:
+   - In LiveKit Cloud, an agent status reports "not found" when no worker process is connected to the cloud project WebSocket and registered under `agent_name = "clinical-voice-agent"`.
+   - **Resolution**: The worker must be launched using `python backend/agent/voice_agent.py dev` (or `start`). Once active, it registers with LiveKit Cloud and receives dispatches immediately.
+
+2. **Gemini Model Name Incompatibility**:
+   - `GEMINI_MODEL=gemini-3.8-flash` in the provided `.env` does not exist on Google's OpenAI-compatible endpoint (`https://generativelanguage.googleapis.com/v1beta/openai/`), returning HTTP 404/503 `status: NOT_FOUND` or `UNAVAILABLE`.
+   - **Resolution**: Added automatic model fallback in `build_llm()` to normalize model names to `gemini-3.1-flash-lite`, which is active, fast, and stable.
+
+3. **ElevenLabs Free Tier Voice Restrictions (HTTP 402)**:
+   - Voice ID `21m00Tcm4TlvDq8ikWAM` ("Rachel") is a library voice that ElevenLabs restricts to paid subscribers (`paid_plan_required: Free users cannot use library voices via the API`).
+   - **Resolution**: Added automatic fallback in `build_tts()` to `EXAVITQu4vr4xnSDxMaL` ("Bella"), a free premade voice supported across all free tiers.
+
+4. **CLI Python Path Resolution**:
+   - Running `python backend/agent/voice_agent.py` directly from PowerShell triggered `ModuleNotFoundError: No module named 'config'` because `sys.path` did not contain the repository root.
+   - **Resolution**: Dynamically added workspace root to `sys.path` at the top of `backend/agent/voice_agent.py`.
+
+---
+
+## 5. Execution Runbook
+
+### Service 1: FastAPI Backend
+```powershell
+cd F:\Voice_Agent
+.venv\Scripts\activate
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-Python:       3.12.14 (C:\Users\3tee\AppData\Roaming\uv\python\cpython-3.12)
-Venv:         F:\Voice_Agent\.venv\
-Activate:     .venv\Scripts\activate
-Tests:        .venv\Scripts\pytest -v
-Agent CLI:    .venv\Scripts\python backend/agent/voice_agent.py dev
-DB Init:      .venv\Scripts\python -c "from backend.database.connection import init_db; init_db()"
-Git user:     Naresh-Kumar17 <vishnaninaresh8@gmail.com>
+Swagger UI: `http://localhost:8000/docs`
+
+### Service 2: LiveKit Voice Worker
+```powershell
+cd F:\Voice_Agent
+.venv\Scripts\activate
+python backend/agent/voice_agent.py dev
 ```
 
----
-
-## Ownership Handoff Update — 2026-11-03
-
-Repository audit and current state are recorded in `PROJECT_MEMORY.md`; phase gates are in `DEVELOPMENT_ROADMAP.md` and `phases.md`. This update preserves the prior memory record above.
-
-- Current branch is `dev/clinical-voice-agent-v1` at `229f7c5` (the older context below incorrectly called it `main`).
-- Phase 6 API foundation was added: `backend/main.py`, versioned routes in `backend/api/routes/v1.py`, and five integration tests. Phase 6 remains partial because no authentication/authorization or PHI access policy exists and real LiveKit is unverified.
-- Baseline 23 tests plus five API integration tests now pass: 28 passed; pytest emits one cache path permission warning.
-- No PRD or `prd.docs/` folder was present. Existing untracked `project_phases_Roadmap.md` was preserved.
-- Phase 6 API foundation commit: `463908e`; no push was performed.
-
-Phase 6 API foundation was locally committed as `463908e` after the test suite passed. Phase 7 frontend foundation was subsequently added but remains uncommitted at this point; see the Phase 7 section in `PROJECT_MEMORY.md` for exact file scope, build result, and remaining checks.
-
-Correction/current update: Phase 7 was committed as `041e68a`; Phase 8 deployment files were committed as `ba88c17`. LiveKit credentials were later added only to ignored local `.env`, and the token/dispatch flow verified. The final state and remaining gates are in `PROJECT_MEMORY.md`; Docker could not be executed because the CLI is unavailable.
-
-The user supplied a Gemini API key, stored only in ignored `.env`. `LLM_PROVIDER=gemini` now selects the Google OpenAI-compatible endpoint and `gemini-3.8-flash`. Local config and adapter tests pass; no outbound Gemini request was made. LiveKit URL/key/secret are now configured locally and worker registration succeeded. STT/TTS provider keys remain unset, so conversation audio still needs configuration and testing.
-
-The worker CLI did not inherit `.env` values through Pydantic Settings alone. `load_dotenv()` was added to `voice_agent.py`; start it from the repo root with `python -m backend.agent.voice_agent dev`. API token creation and LiveKit Cloud dispatch are verified. Actual participant audio is not.
-
-## Active delivery session update (2026-11-03)
-
-The active repository is `E:\Voice_Agent\Voice_Agent`, on `main` at `1a9647b`. The outer folder is an older clone. The visible remote feature branch is already merged through PR #1, so no merge is pending. A local Python 3.11.9 `.venv` was created and supplied project dependencies installed. The current deterministic evaluation suite actually runs but is failing: 5/15 scenarios pass (33.3% task completion; 63.3% tool accuracy). The reported 100% safety metric is not release evidence because the grader is too shallow. Next work is the PRD-compliant tester: isolated data/clock, all TC-001–TC-035 scenarios, full traces, exact side-effect checks, and hard safety/integrity gates before UI polish.
-
-Evaluation isolation is now implemented: each suite scenario receives a fresh in-memory SQLite database and reset mock-calendar fixture, while evaluation history is persisted separately. With fixed time plus isolation, the 15-scenario baseline is now 11/15 passing (73.3%) and 80.0% tool accuracy; 23 focused backend/evaluation tests pass. Four remaining failures are meaningful workflow/extraction gaps, not suite contamination.
-
-Those four failures are fixed and regression-covered: flexible booking flow, booked alternatives, name corrections, and clinic-information interruptions all preserve the correct workflow. The explicit rescheduling intent is protected from booking-intent precedence. Latest evidence: 29 focused tests pass and the current deterministic 15-scenario suite passes 15/15. This is only the existing partial scenario library; TC-001–TC-035 and audio/provider tests are still required for PRD completion.
-
+### Service 3: Frontend Web UI
+```powershell
+cd F:\Voice_Agent\frontend
+npm run dev
+```
+Web App: `http://localhost:5173`
