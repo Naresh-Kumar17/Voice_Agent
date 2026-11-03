@@ -72,13 +72,13 @@
 
 ## 3. Test Suite Verification
 
-**Current status**: **39 / 39 automated tests pass** (`pytest -v` in ~19.3s):
+**Current status**: **43 / 43 automated tests pass** (`pytest -v` in ~36.9s):
 - `tests/integration/test_api_routes.py`: 5 passed
 - `tests/unit/test_appointment_service.py`: 9 passed
 - `tests/unit/test_clinical_tools.py`: 4 passed
 - `tests/unit/test_conversation_manager.py`: 9 passed
 - `tests/unit/test_evaluation_engine.py`: 7 passed
-- `tests/unit/test_voice_agent_pipeline.py`: 5 passed
+- `tests/unit/test_voice_agent_pipeline.py`: 9 passed
 
 ---
 

@@ -65,3 +65,62 @@ def test_gemini_provider_requires_key(monkeypatch):
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY is not configured"):
         build_llm()
 
+
+def test_gemini_model_fallback_normalization(monkeypatch):
+    captured = {}
+    expected = object()
+    monkeypatch.setattr(voice_agent.settings, "LLM_PROVIDER", "gemini")
+    monkeypatch.setattr(voice_agent.settings, "GEMINI_API_KEY", "local-test-key")
+    monkeypatch.setattr(voice_agent.settings, "GEMINI_MODEL", "gemini-3.8-flash")
+    monkeypatch.setattr(
+        voice_agent.openai,
+        "LLM",
+        lambda **kwargs: captured.update(kwargs) or expected,
+    )
+
+    assert build_llm() is expected
+    # gemini-3.8-flash should automatically normalize to gemini-3.1-flash-lite
+    assert captured["model"] == "gemini-3.1-flash-lite"
+
+
+def test_elevenlabs_voice_fallback(monkeypatch):
+    captured = {}
+    expected = object()
+    monkeypatch.setattr(voice_agent.settings, "TTS_PROVIDER", "elevenlabs")
+    monkeypatch.setattr(voice_agent.settings, "ELEVENLABS_API_KEY", "sk-test-eleven")
+    monkeypatch.setattr(voice_agent.settings, "ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+    monkeypatch.setattr(voice_agent.settings, "ELEVENLABS_MODEL_ID", "eleven_turbo_v2_5")
+
+    class FakeElevenLabsTTS:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr("livekit.plugins.elevenlabs.TTS", FakeElevenLabsTTS)
+    tts = voice_agent.build_tts()
+    assert isinstance(tts, FakeElevenLabsTTS)
+    # Rachel (21m00Tcm4TlvDq8ikWAM) should normalize to free premade voice Bella
+    assert captured["voice_id"] == "EXAVITQu4vr4xnSDxMaL"
+
+
+def test_elevenlabs_fallback_to_openai_without_key(monkeypatch):
+    captured = {}
+    expected = object()
+    monkeypatch.setattr(voice_agent.settings, "TTS_PROVIDER", "elevenlabs")
+    monkeypatch.setattr(voice_agent.settings, "ELEVENLABS_API_KEY", "")
+    monkeypatch.setattr(voice_agent.openai, "TTS", lambda **kwargs: captured.update(kwargs) or expected)
+
+    assert voice_agent.build_tts() is expected
+    assert "voice" in captured
+
+
+def test_deepgram_stt_fallback_without_key(monkeypatch):
+    captured = {}
+    expected = object()
+    monkeypatch.setattr(voice_agent.settings, "STT_PROVIDER", "deepgram")
+    monkeypatch.setattr(voice_agent.settings, "DEEPGRAM_API_KEY", "")
+    monkeypatch.setattr(voice_agent.openai, "STT", lambda **kwargs: captured.update(kwargs) or expected)
+
+    assert voice_agent.build_stt() is expected
+    assert "api_key" in captured
+
+

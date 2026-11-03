@@ -29,7 +29,7 @@ A **production-grade Clinical AI Receptionist ("Rachel")** — a real-time voice
 | **Phase 7: React Frontend & Evaluation Dashboard** | ✅ COMPLETE | React 19 + TypeScript + Vite, WebRTC voice call panel, audio visualizer orb, live transcript, scenario runner |
 | **Phase 8: Docker & Production Runbook** | ✅ COMPLETE | Multi-stage Dockerfile, docker-compose.yml, nginx configuration, production runbook |
 
-**Test Status**: **39 / 39 automated tests passing** across unit and integration suites.
+**Test Status**: **43 / 43 automated tests passing** across unit and integration suites.
 
 ---
 
