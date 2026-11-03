@@ -103,7 +103,7 @@ Validation: `npm run build` passes using installed dependencies. Vite reports on
 Added API/agent `Dockerfile`, Compose with Postgres/API/agent/frontend, health checks for database/API/frontend, persistent Postgres volume, frontend multi-stage image and Nginx API proxy, `.dockerignore`, and root deployment README. Declared `psycopg2-binary` for the existing PostgreSQL URL format. Compose ports bind to localhost by default. YAML parsed successfully with PyYAML. Docker/Compose is not installed, so no image or startup test was run. Authentication, migrations, backup/restore, live external services, and browser E2E remain blockers; Phase 8 is partial.
 
 - Local commits on `dev/clinical-voice-agent-v1`: `463908e` (`feat(api): add clinical service and evaluation routes`) and `041e68a` (`feat(frontend): add voice client and evaluation dashboard`).
-- Docker/README/Phase 8 additions are not yet committed. No push performed.
+- Docker/README/Phase 8 additions are in `ba88c17`. No push performed.
 - Latest Python validation: 28 passed, one pytest cache permission warning. Latest frontend validation: Vite production build passes with the noted large-chunk warning.
 
 ## Known risks and implementation order

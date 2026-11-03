@@ -50,7 +50,7 @@ Development is at the start of Phase 6. Five feature commits exist through evalu
 - Completed: responsive React voice interface and evaluation dashboard, token-based LiveKit client, agent dispatch, transcription/audio hooks, individual scenario runs, saved run inspector.
 - Files changed: `frontend/` app and package lock, `backend/api/routes/v1.py`, `backend/agent/voice_agent.py`, `config/settings.py`, `evaluation/runner.py`, `tests/integration/test_api_routes.py`, `.env.example`.
 - Tests: `npm run build` -> passed (one Vite chunk-size warning: 815.26 KB minified JS); `.venv\Scripts\python.exe -m pytest -q` -> 28 passed, one pytest cache permission warning.
-- Commit: pending.
+- Commit: `041e68a` (`feat(frontend): add voice client and evaluation dashboard`).
 - Remaining: no browser interaction or live LiveKit test (service credentials/worker unavailable); orb is a connection/speaking indicator, not a waveform; simulated transcript persisted in trace; bundle needs code splitting. Phase 7 is partial.
 
 ### Phase 8 deployment foundation
@@ -58,5 +58,5 @@ Development is at the start of Phase 6. Five feature commits exist through evalu
 - Completed: Python/worker Dockerfile, Postgres/API/agent/frontend Compose stack, health checks for Postgres/API/frontend, persistent database volume, frontend Nginx container and API proxy, `.dockerignore`, root setup/deployment guide, PostgreSQL driver dependency.
 - Files changed: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `frontend/Dockerfile`, `frontend/nginx.conf`, `README.md`, `.env.example`, `requirements.txt`.
 - Validation: PyYAML parsed `docker-compose.yml`; Docker/Compose is unavailable, so image build/startup/health checks could not be run. API integration and frontend build were validated separately.
-- Commit: pending.
+- Commit: `ba88c17` (`chore(deploy): add compose stack and deployment guide`).
 - Remaining: validate Compose on a Docker host; E2E across browser, API, worker, Postgres and providers; migrations and backup/restore; authentication/authorization and PHI policy; remove production release blockers in README. Phase 8 is partial.
