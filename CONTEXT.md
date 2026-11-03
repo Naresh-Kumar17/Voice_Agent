@@ -221,3 +221,5 @@ This addendum supersedes the phase/branch snapshot above while retaining its ori
 
 Phase 7 now has a partial React + TypeScript + Vite frontend in `frontend/` (commit `041e68a`). `npm run build` passes with a large bundle warning; live browser/LiveKit verification is outstanding. The token route dispatches the configured named worker and grants a 30-minute token limited to microphone publish and subscription. Phase 8 Docker/Compose and runbook files are committed as `ba88c17`. Docker CLI is unavailable. `project_phases_Roadmap.md` remains pre-existing untracked user content.
 
+Gemini LLM support is now wired through Google's OpenAI-compatible endpoint; the supplied Gemini key is present only in ignored local `.env`. Settings load `LLM_PROVIDER=gemini` and `gemini-3.8-flash`; no Gemini request was made. LiveKit URL/key/secret and STT/TTS credentials remain missing, so voice calling remains unavailable until those are configured and the API/agent processes restarted.
+

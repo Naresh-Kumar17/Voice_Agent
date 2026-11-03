@@ -53,6 +53,17 @@ def build_llm():
             base_url="https://api.groq.com/openai/v1",
             temperature=0.2,
         )
+    if settings.LLM_PROVIDER == "gemini":
+        if not settings.GEMINI_API_KEY:
+            raise RuntimeError("LLM_PROVIDER is gemini but GEMINI_API_KEY is not configured")
+        logger.info(f"Using Gemini LLM: {settings.GEMINI_MODEL}")
+        return openai.LLM(
+            model=settings.GEMINI_MODEL,
+            api_key=settings.GEMINI_API_KEY,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            temperature=0.2,
+            extra_headers={"x-goog-api-client": "clinical-voice-agent/1.0.0"},
+        )
     logger.info(f"Using OpenAI LLM: {settings.OPENAI_MODEL}")
     return openai.LLM(
         model=settings.OPENAI_MODEL,

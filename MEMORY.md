@@ -156,3 +156,5 @@ Phase 6 API foundation was locally committed as `463908e` after the test suite p
 
 Correction/current update: Phase 7 was committed as `041e68a`; Phase 8 deployment files were committed as `ba88c17`. The final state and missing production gates are summarized in `PROJECT_MEMORY.md`; Docker could not be executed because the CLI is unavailable.
 
+The user supplied a Gemini API key, stored only in ignored `.env`. `LLM_PROVIDER=gemini` now selects the Google OpenAI-compatible endpoint and `gemini-3.8-flash`. Local config and adapter tests pass; no outbound Gemini request was made. LiveKit URL/key/secret and STT/TTS provider keys remain unset, so the voice workflow still cannot start.
+

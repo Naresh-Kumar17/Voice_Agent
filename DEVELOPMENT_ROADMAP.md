@@ -60,3 +60,9 @@ Development is at the start of Phase 6. Five feature commits exist through evalu
 - Validation: PyYAML parsed `docker-compose.yml`; Docker/Compose is unavailable, so image build/startup/health checks could not be run. API integration and frontend build were validated separately.
 - Commit: `ba88c17` (`chore(deploy): add compose stack and deployment guide`).
 - Remaining: validate Compose on a Docker host; E2E across browser, API, worker, Postgres and providers; migrations and backup/restore; authentication/authorization and PHI policy; remove production release blockers in README. Phase 8 is partial.
+
+### Gemini provider configuration
+
+- Completed: Gemini model selection now uses the configured key and Google OpenAI-compatible endpoint; selected current stable model; local `.env` loads the user-provided key and remains ignored by Git.
+- Validation: two local configuration tests; full Python suite 30 passed. No external Gemini request was made.
+- Remaining: LiveKit and STT/TTS credentials are still missing; live voice cannot connect. Verify Gemini once the user chooses to test an external request.
