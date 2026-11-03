@@ -160,3 +160,11 @@ The user supplied a Gemini API key, stored only in ignored `.env`. `LLM_PROVIDER
 
 The worker CLI did not inherit `.env` values through Pydantic Settings alone. `load_dotenv()` was added to `voice_agent.py`; start it from the repo root with `python -m backend.agent.voice_agent dev`. API token creation and LiveKit Cloud dispatch are verified. Actual participant audio is not.
 
+## Active delivery session update (2026-11-03)
+
+The active repository is `E:\Voice_Agent\Voice_Agent`, on `main` at `1a9647b`. The outer folder is an older clone. The visible remote feature branch is already merged through PR #1, so no merge is pending. A local Python 3.11.9 `.venv` was created and supplied project dependencies installed. The current deterministic evaluation suite actually runs but is failing: 5/15 scenarios pass (33.3% task completion; 63.3% tool accuracy). The reported 100% safety metric is not release evidence because the grader is too shallow. Next work is the PRD-compliant tester: isolated data/clock, all TC-001–TC-035 scenarios, full traces, exact side-effect checks, and hard safety/integrity gates before UI polish.
+
+Evaluation isolation is now implemented: each suite scenario receives a fresh in-memory SQLite database and reset mock-calendar fixture, while evaluation history is persisted separately. With fixed time plus isolation, the 15-scenario baseline is now 11/15 passing (73.3%) and 80.0% tool accuracy; 23 focused backend/evaluation tests pass. Four remaining failures are meaningful workflow/extraction gaps, not suite contamination.
+
+Those four failures are fixed and regression-covered: flexible booking flow, booked alternatives, name corrections, and clinic-information interruptions all preserve the correct workflow. The explicit rescheduling intent is protected from booking-intent precedence. Latest evidence: 29 focused tests pass and the current deterministic 15-scenario suite passes 15/15. This is only the existing partial scenario library; TC-001–TC-035 and audio/provider tests are still required for PRD completion.
+

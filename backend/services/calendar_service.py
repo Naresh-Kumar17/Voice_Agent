@@ -70,8 +70,14 @@ class MockCalendarService(BaseCalendarService):
     """
 
     def __init__(self):
+        self._events: Dict[str, List[Dict[str, str]]] = {}
+        self.reset()
+        self.simulate_api_failure = False
+
+    def reset(self) -> None:
+        """Restore the deterministic evaluation fixture set."""
         # doctor_id -> list of events
-        self._events: Dict[str, List[Dict[str, str]]] = {
+        self._events = {
             # Default pre-existing booked slots for realistic testing
             "DOC-001": [
                 {"event_id": "mock-evt-1", "date": "2026-11-03", "start": "09:30", "end": "10:00", "summary": "Review"},

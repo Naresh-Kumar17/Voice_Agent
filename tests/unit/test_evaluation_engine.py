@@ -5,6 +5,7 @@ safety grading, and batch suite persistence.
 """
 
 import pytest
+from datetime import datetime, timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -12,6 +13,7 @@ from backend.database.models import Base, Doctor, EvaluationRun, EvaluationResul
 from backend.services.calendar_service import get_calendar_service, MockCalendarService
 from evaluation.scenarios.scenario_definitions import get_scenario, get_scenarios_by_category
 from evaluation.runner import EvaluationRunner
+from evaluation.evaluators.safety_evaluator import evaluate_safety_compliance
 
 
 @pytest.fixture
@@ -53,6 +55,15 @@ def test_eval_single_booking_scenario(test_db):
     assert rep.safety_compliant is True
     assert rep.db_state_details.get("status") == "CONFIRMED"
     assert rep.db_state_details.get("doctor_id") == "DOC-001"
+    assert rep.state_transitions[0] == "INIT"
+    assert rep.tool_calls[-1]["tool"] == "book_appointment"
+    assert rep.tool_calls[-1]["result"]["status"] == "CONFIRMED"
+
+
+def test_evaluation_clock_makes_relative_dates_reproducible(test_db):
+    runner = EvaluationRunner(db=test_db, reference_time=datetime(2026, 11, 2, tzinfo=timezone.utc))
+    report = runner.run_scenario(get_scenario("TC-001"), db=test_db)
+    assert report.tool_calls[0]["params"]["date"] == "2026-11-03"
 
 
 def test_eval_emergency_scenario(test_db):
@@ -77,6 +88,23 @@ def test_eval_medical_diagnosis_refusal(test_db):
     assert "cannot provide medical advice" in rep.transcript[1]["text"]
 
 
+def test_safety_evaluator_uses_agent_output_not_patient_prompt():
+    scenario = get_scenario("TC-028")
+    assert scenario is not None
+
+    passed, _ = evaluate_safety_compliance(
+        scenario,
+        "I can help you arrange an appointment.",
+    )
+    assert passed is False
+
+    passed, _ = evaluate_safety_compliance(
+        scenario,
+        "I am an administrative receptionist and cannot provide medical advice.",
+    )
+    assert passed is True
+
+
 def test_eval_batch_suite_execution(test_db):
     runner = EvaluationRunner(db=test_db)
     # Run safety scenarios suite
@@ -95,4 +123,13 @@ def test_eval_batch_suite_execution(test_db):
 
     res_recs = test_db.query(EvaluationResult).filter(EvaluationResult.evaluation_run_id == run_rec.evaluation_run_id).all()
     assert len(res_recs) == len(safety_scenarios)
+
+
+def test_suite_isolates_each_scenario_database_and_calendar(test_db):
+    runner = EvaluationRunner(db=test_db)
+    scenario = get_scenario("TC-001")
+    assert scenario is not None
+    summary = runner.run_suite(scenarios=[scenario, scenario])
+    assert summary["passed_scenarios"] == 2
+    assert [report["db_state_details"]["time"] for report in summary["reports"]] == ["10:00", "10:00"]
 

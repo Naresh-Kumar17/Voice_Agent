@@ -11,6 +11,7 @@ from backend.services.calendar_service import get_calendar_service, MockCalendar
 from backend.agent.guardrails import evaluate_input_guardrails, verify_booking_hallucination
 from backend.agent.state_manager import ConversationStateManager, ConversationState
 from backend.agent.conversation_manager import ConversationManager
+from backend.tools.clinical_tools import book_appointment
 
 
 @pytest.fixture
@@ -106,4 +107,35 @@ def test_multiturn_booking_flow(test_db):
     assert "confirmed" in r4.lower()
     assert mgr.state_mgr.state == ConversationState.BOOKED
     assert mgr.state_mgr.slots.appointment_id is not None
+
+
+def test_reschedule_flow_uses_verified_tool_result(test_db):
+    created = book_appointment(
+        patient_name="Jane Doe", contact_number="555-444-5555", doctor_id="DOC-001",
+        appointment_date="2026-11-03", appointment_time="10:00", db=test_db,
+    )
+    manager = ConversationManager("reschedule-session", db=test_db)
+    response = manager.process_turn(
+        f"Please reschedule my appointment {created['appointment_id']} to 2026-11-04 at 10am."
+    )
+    assert "rescheduled" in response.lower()
+    assert manager.last_tool_call["tool"] == "reschedule_appointment"
+    assert manager.state_mgr.state == ConversationState.RESCHEDULED
+
+
+def test_booking_context_survives_clinic_information_interruption(test_db):
+    manager = ConversationManager("booking-interruption", db=test_db)
+    response = manager.process_turn(
+        "Can I book with Dr. Ahmed tomorrow at 10am? By the way, where is your clinic located?"
+    )
+    assert "located at" in response.lower()
+    assert "name" in response.lower()
+    assert manager.state_mgr.slots.intent == "BOOK_APPOINTMENT"
+    assert manager.last_tool_call["tool"] == "get_clinic_information"
+
+
+def test_name_correction_overrides_earlier_name(test_db):
+    manager = ConversationManager("name-correction", db=test_db)
+    manager.process_turn("I'd like Dr. Ahmed tomorrow at 10am. My name is Jack, wait sorry, Johnathan Doe. Phone 555-222-3333.")
+    assert manager.state_mgr.slots.patient_name == "Johnathan Doe"
 

@@ -123,3 +123,25 @@ The user provided a LiveKit Cloud project URL/key/secret. These are stored only 
 5. In parallel with completion gates: fix/test scheduling compensation and cancellation, safe calendar unavailability, rescheduling intent and evaluation accuracy.
 
 No phase has been declared fully complete solely because its files exist. External provider validation requires credentials and infrastructure not present in this workspace.
+
+## Active delivery session update (2026-11-03)
+
+- **Repository reconciliation:** `E:\Voice_Agent\Voice_Agent` is the active clean Git checkout on `main` at `1a9647b` (merged PR #1). The outer `E:\Voice_Agent` checkout is an older clone and must not be used for implementation. Remote branch `origin/feature/clinical-voice-agent-v2` remains visible but is already merged into `main`; no merge is pending.
+- **Local environment:** a project-local Python 3.11.9 virtual environment was created at `.venv`. The declared FastAPI, SQLAlchemy, testing, LiveKit Agents, and provider-plugin dependencies were installed locally. `.venv` remains ignored and must not be committed.
+- **Evaluation baseline:** `EvaluationRunner().run_suite()` executed successfully against the current deterministic path: **15 total scenarios, 5 passed, 10 failed, 33.3% overall pass rate, 33.3% task completion, 63.3% tool accuracy, and a reported 100% safety score.** The safety score is not a release claim: the present evaluator is transcript-keyword based and must be replaced/hardened.
+- **Delivery priority:** build the PRD-compliant automated tester before frontend polish. It must use an injected clock and isolated DB/calendar, cover TC-001 through TC-035, retain full execution traces, score tool arguments/results and state transitions, independently verify database/calendar outcomes, and enforce safety and booking-integrity hard gates.
+- **Known current validation limitation:** the full `pytest -q` invocation did not yield a reliable completion report in this execution host after the LiveKit runtime import stage. Treat the historic test counts as stale until the suite is rerun and captured after the evaluation-harness changes.
+
+## Evaluation isolation update (2026-11-03)
+
+- Every `EvaluationRunner.run_suite()` scenario now executes in a disposable, in-memory SQLite database cloned only from clinic doctor configuration. Patient, appointment, audit, and calendar mutations cannot leak between scenarios or into the database that stores evaluation history.
+- The deterministic mock calendar now has `reset()`, restoring its documented busy-slot fixture before every scenario. Evaluations require `GOOGLE_CALENDAR_SANDBOX=true`; they must never use a live clinic calendar.
+- Evaluation records remain persisted to the caller-provided history database, including tool results and state-transition traces.
+- Verified baseline after isolation: **23 focused backend/evaluation tests passed**; existing 15-scenario suite: **11 passed / 4 failed (73.3% overall task pass; 80.0% tool accuracy; 100.0% safety for the current covered cases)**. Remaining meaningful gaps: flexible-time booking (TC-004), unavailable-slot expected-outcome semantics (TC-009), correction extraction (TC-016), and preserving booking context through a clinic-information interruption (TC-018).
+
+## Workflow repair update (2026-11-03)
+
+- Repaired all four post-isolation scenario failures: booking requests now take precedence over incidental clinic wording; a clinic-information answer can be given without losing the booking workflow; a caller's explicit name correction replaces the earlier name; and alternative-slot scenarios validate a booked alternative rather than incorrectly requiring the unavailable original time.
+- Guarded the booking-intent precedence rule so it cannot override an explicit `RESCHEDULE_APPOINTMENT` intent.
+- Added conversation regression coverage for name correction and clinic-information interruptions.
+- Verified: **29 focused service/conversation/evaluation tests passed** and the current 15-scenario deterministic suite reports **15/15 passed, 100% task completion, 100% tool accuracy, and 100% safety for its covered scope.** This does not yet satisfy the PRD's required TC-001–TC-035 suite or real audio/provider evaluation.

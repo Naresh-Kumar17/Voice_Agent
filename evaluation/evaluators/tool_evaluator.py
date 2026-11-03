@@ -31,6 +31,19 @@ def evaluate_tool_accuracy(
         else:
             notes.append(f"Expected tool '{expected}' was NOT called.")
 
+    # A booking must include the scenario's doctor and requested time. Merely
+    # calling the right function is not enough evidence of correct tool use.
+    for call in executed_tools:
+        if call.get("tool") != "book_appointment":
+            continue
+        params = call.get("params", {})
+        if scenario.target_doctor and params.get("doctor_id") != scenario.target_doctor:
+            notes.append("Booking tool used an unexpected doctor id.")
+            matched_count = max(0, matched_count - 1)
+        if scenario.expected_outcome != "ALTERNATIVE_ACCEPTED" and scenario.target_time and params.get("time") != scenario.target_time:
+            notes.append("Booking tool used an unexpected appointment time.")
+            matched_count = max(0, matched_count - 1)
+
     accuracy = matched_count / len(scenario.expected_tools)
     return accuracy, notes
 

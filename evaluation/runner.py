@@ -12,10 +12,13 @@ import time
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from config.settings import settings
 from backend.database.connection import SessionLocal
-from backend.database.models import EvaluationRun, EvaluationResult, generate_uuid
+from backend.database.models import Base, Doctor, EvaluationRun, EvaluationResult, generate_uuid
+from backend.services.calendar_service import MockCalendarService, get_calendar_service
 from backend.agent.conversation_manager import ConversationManager
 from evaluation.scenarios.scenario_definitions import EvaluationScenario, SCENARIO_LIBRARY, get_scenario
 from evaluation.simulators.simulated_patient import SimulatedPatient
@@ -40,16 +43,50 @@ class ScenarioRunReport(BaseModel):
     failure_category: Optional[str] = None
     transcript: List[Dict[str, str]] = Field(default_factory=list)
     tool_calls: List[Dict[str, Any]] = Field(default_factory=list)
+    state_transitions: List[str] = Field(default_factory=list)
     db_state_details: Dict[str, Any] = Field(default_factory=dict)
     notes: List[str] = Field(default_factory=list)
 
 
 class EvaluationRunner:
-    def __init__(self, db: Optional[Session] = None):
+    def __init__(self, db: Optional[Session] = None, reference_time: Optional[datetime] = None):
         self._external_db = db
+        # Evaluation data includes deterministic mock-calendar fixtures for
+        # 2026-11-03. Keep relative-date scenarios reproducible regardless of
+        # the host clock; production ConversationManager still uses real time.
+        self.reference_time = reference_time or datetime(2026, 11, 2, tzinfo=timezone.utc)
 
     def _get_db(self) -> Session:
         return self._external_db or SessionLocal()
+
+    def _isolated_scenario_db(self, history_db: Session) -> Session:
+        """Create a disposable DB containing only the clinic configuration.
+
+        Evaluation traffic must never compete with another scenario (or mutate
+        patient data in the history database). The persisted EvaluationRun and
+        EvaluationResult records remain in ``history_db``.
+        """
+        calendar = get_calendar_service()
+        if not isinstance(calendar, MockCalendarService):
+            raise RuntimeError("Deterministic evaluations require GOOGLE_CALENDAR_SANDBOX=true.")
+        calendar.reset()
+        engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+        Base.metadata.create_all(bind=engine)
+        scenario_session = sessionmaker(bind=engine)()
+        doctors = history_db.query(Doctor).all()
+        for doctor in doctors:
+            scenario_session.add(Doctor(
+                doctor_id=doctor.doctor_id,
+                doctor_name=doctor.doctor_name,
+                specialization=doctor.specialization,
+                calendar_id=doctor.calendar_id,
+                timezone=doctor.timezone,
+                active_status=doctor.active_status,
+                working_hours_start=doctor.working_hours_start,
+                working_hours_end=doctor.working_hours_end,
+            ))
+        scenario_session.commit()
+        return scenario_session
 
     def run_scenario(
         self,
@@ -63,7 +100,7 @@ class EvaluationRunner:
         active_db = db or self._get_db()
         sim_patient = SimulatedPatient(scenario)
         session_id = f"eval-{scenario.scenario_id}-{generate_uuid()[:6]}"
-        agent_manager = ConversationManager(session_id=session_id, db=active_db)
+        agent_manager = ConversationManager(session_id=session_id, db=active_db, now=self.reference_time)
 
         transcript: List[Dict[str, str]] = []
         tool_calls: List[Dict[str, Any]] = []
@@ -75,6 +112,7 @@ class EvaluationRunner:
         for turn_idx in range(max_turns):
             transcript.append({"speaker": "patient", "text": current_patient_msg})
 
+            prior_tool_call = agent_manager.last_tool_call
             t0 = time.perf_counter()
             agent_response = agent_manager.process_turn(current_patient_msg)
             t1 = time.perf_counter()
@@ -83,8 +121,11 @@ class EvaluationRunner:
 
             transcript.append({"speaker": "agent", "text": agent_response})
 
-            if agent_manager.last_tool_call:
-                tool_calls.append(agent_manager.last_tool_call)
+            if agent_manager.last_tool_call and agent_manager.last_tool_call != prior_tool_call:
+                tool_calls.append({
+                    **agent_manager.last_tool_call,
+                    "result": agent_manager.last_tool_result,
+                })
 
             # Check if patient wishes to respond further
             next_patient_msg = sim_patient.respond_to_agent(agent_response)
@@ -95,11 +136,13 @@ class EvaluationRunner:
         total_duration_ms = (time.perf_counter() - start_time_all) * 1000.0
         avg_latency_ms = sum(turn_latencies) / len(turn_latencies) if turn_latencies else 0.0
 
-        full_transcript_text = "\n".join([f"{t['speaker'].upper()}: {t['text']}" for t in transcript])
+        agent_response_text = "\n".join(
+            turn["text"] for turn in transcript if turn["speaker"] == "agent"
+        )
         final_agent_utterance = transcript[-1]["text"] if transcript else ""
 
         # --- Evaluator 1: Safety Compliance ---
-        safety_passed, safety_notes = evaluate_safety_compliance(scenario, full_transcript_text)
+        safety_passed, safety_notes = evaluate_safety_compliance(scenario, agent_response_text)
 
         # --- Evaluator 2: Tool Execution Accuracy ---
         tool_acc, tool_notes = evaluate_tool_accuracy(scenario, tool_calls)
@@ -144,6 +187,7 @@ class EvaluationRunner:
             failure_category=failure_cat,
             transcript=transcript,
             tool_calls=tool_calls,
+            state_transitions=[state.value for state in agent_manager.state_mgr.state_history],
             db_state_details=task_result.details,
             notes=notes,
         )
@@ -179,7 +223,11 @@ class EvaluationRunner:
         failed_count = 0
 
         for sc in scenarios_to_run:
-            rep = self.run_scenario(sc, db=db)
+            scenario_db = self._isolated_scenario_db(db)
+            try:
+                rep = self.run_scenario(sc, db=scenario_db)
+            finally:
+                scenario_db.close()
             reports.append(rep)
             if rep.passed:
                 passed_count += 1
@@ -204,6 +252,7 @@ class EvaluationRunner:
                 trace_summary=json.dumps({
                     "notes": rep.notes,
                     "tool_calls": rep.tool_calls,
+                    "state_transitions": rep.state_transitions,
                     "transcript": rep.transcript,
                     "db_state_details": rep.db_state_details,
                 }),

@@ -209,7 +209,7 @@ SCENARIO_LIBRARY: List[EvaluationScenario] = [
         patient_name="Karen Page",
         contact_number="555-444-1111",
         expected_outcome="BOOKED",
-        expected_tools=["lookup_clinic_information", "check_availability", "book_appointment"],
+        expected_tools=["get_clinic_information", "check_availability", "book_appointment"],
     ),
 
     # -------------------------------------------------------------------------

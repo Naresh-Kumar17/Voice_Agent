@@ -27,10 +27,11 @@ logger = logging.getLogger(__name__)
 
 
 class ConversationManager:
-    def __init__(self, session_id: str, db: Optional[Session] = None):
+    def __init__(self, session_id: str, db: Optional[Session] = None, now: Optional[datetime] = None):
         self.session_id = session_id
         self.state_mgr = ConversationStateManager(session_id)
         self.db = db
+        self.now = now
         self.last_tool_call: Optional[Dict[str, Any]] = None
         self.last_tool_result: Optional[Dict[str, Any]] = None
 
@@ -49,10 +50,10 @@ class ConversationManager:
             extracted["intent"] = "RESCHEDULE_APPOINTMENT"
         elif any(w in text_lower for w in ["available", "free", "opening", "openings"]):
             extracted["intent"] = "CHECK_AVAILABILITY"
-        elif any(w in text_lower for w in ["hours", "address", "location", "clinic", "open"]):
-            extracted["intent"] = "CLINIC_INFORMATION"
         elif any(w in text_lower for w in ["book", "schedule", "make an appointment", "see dr", "see doctor", "appointment"]):
             extracted["intent"] = "BOOK_APPOINTMENT"
+        elif any(w in text_lower for w in ["hours", "address", "location", "clinic"]):
+            extracted["intent"] = "CLINIC_INFORMATION"
 
         # 2. Doctor Matching
         if "ahmed" in text_lower or "khan" in text_lower:
@@ -71,7 +72,7 @@ class ConversationManager:
             extracted["contact_number"] = phone_match.group(0).strip()
 
         # 4. Date Normalization
-        today = datetime.now(timezone.utc)
+        today = self.now or datetime.now(timezone.utc)
         if "tomorrow" in text_lower:
             extracted["appointment_date"] = (today + timedelta(days=1)).strftime("%Y-%m-%d")
         elif "today" in text_lower:
@@ -101,6 +102,12 @@ class ConversationManager:
         name_match = re.search(r"(?:my name is|this is|i am|name's)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)", text, re.IGNORECASE)
         if name_match:
             extracted["patient_name"] = name_match.group(1).strip()
+        correction_match = re.search(
+            r"(?:wait\s*,?\s*sorry\s*,?\s*|actually\s*,?\s*)([A-Z][A-Za-z'-]*(?:\s+[A-Z][A-Za-z'-]*)?)",
+            text,
+        )
+        if correction_match:
+            extracted["patient_name"] = correction_match.group(1).strip()
 
         # 7. Appointment ID Matching (e.g. APT-12345678)
         apt_match = re.search(r"\b(APT-[A-Z0-9]{8})\b", text, re.IGNORECASE)
@@ -130,6 +137,17 @@ class ConversationManager:
 
         # Step 2: Information Extraction & State Update
         extracted = self.extract_entities_rule_based(user_utterance)
+        has_booking_request = any(
+            phrase in user_utterance.lower()
+            for phrase in ["book", "schedule", "make an appointment", "see dr", "see doctor"]
+        )
+        asks_clinic_info = any(
+            phrase in user_utterance.lower() for phrase in ["hours", "address", "location", "where is your clinic"]
+        )
+        # A question such as "Can I book ...; where are you located?" is a
+        # booking request with an interruption, not a replacement intent.
+        if has_booking_request and extracted.get("intent") != "RESCHEDULE_APPOINTMENT":
+            extracted["intent"] = "BOOK_APPOINTMENT"
         self.state_mgr.update_slots(extracted)
 
         slots = self.state_mgr.slots
@@ -140,12 +158,54 @@ class ConversationManager:
             info = get_clinic_information()
             return f"{info['clinic_name']} is located at {info['address']}. We are open {info['operating_hours']}. How may I help you today?"
 
+        if intent == "BOOK_APPOINTMENT" and asks_clinic_info:
+            info = get_clinic_information()
+            self.last_tool_call = {"tool": "get_clinic_information", "params": {}}
+            self.last_tool_result = info
+            if not self.state_mgr.is_booking_info_complete():
+                question = self.state_mgr.get_next_question()
+                return f"{info['clinic_name']} is located at {info['address']}. {question}"
+
         if intent == "CANCEL_APPOINTMENT":
             if not slots.appointment_id:
                 return "I would be happy to help you cancel your appointment. Could you please provide your appointment confirmation number (starting with APT-)?"
             result = cancel_appointment(slots.appointment_id, db=self.db)
             self.state_mgr.transition(ConversationState.CANCELLED, "Appointment cancelled")
             return result.get("message", "Your appointment has been cancelled.")
+
+        if intent == "RESCHEDULE_APPOINTMENT":
+            if not slots.appointment_id:
+                return "I can help reschedule your visit. Please provide your appointment confirmation number."
+            if not slots.appointment_date:
+                return "What new date would you prefer for the appointment?"
+            if not slots.appointment_time:
+                return "What new time would you prefer?"
+            result = reschedule_appointment(
+                appointment_id=slots.appointment_id,
+                new_date=slots.appointment_date,
+                new_time=slots.appointment_time,
+                db=self.db,
+            )
+            self.last_tool_call = {
+                "tool": "reschedule_appointment",
+                "params": {"appointment_id": slots.appointment_id, "date": slots.appointment_date, "time": slots.appointment_time},
+            }
+            self.last_tool_result = result
+            if result.get("status") == "CONFIRMED":
+                self.state_mgr.transition(ConversationState.RESCHEDULED, "Appointment rescheduled")
+            return result.get("message", "I could not reschedule that appointment.")
+
+        # A caller may accept an offered alternative without repeating the time.
+        # Select the first explicitly offered slot, then re-check it before any
+        # confirmation or booking is possible.
+        if self.state_mgr.state == ConversationState.OFFERING_ALTERNATIVES:
+            accepted = extracted.get("confirmed_by_patient", False)
+            if accepted and slots.available_alternatives:
+                slots.appointment_time = slots.available_alternatives[0]
+                slots.confirmed_by_patient = False
+                self.state_mgr.transition(ConversationState.COLLECTING_INFO, "Alternative slot selected")
+            elif accepted:
+                return "I no longer have an available alternative to offer. What other date or time would you prefer?"
 
         # Step 4: Handle Appointment Booking Workflow
         # If required fields are incomplete, ask for the next missing field

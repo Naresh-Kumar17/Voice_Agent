@@ -118,6 +118,33 @@ def evaluate_task_outcome(
                 error_message=f"Appointment status is '{apt.status}', expected 'CONFIRMED'.",
             )
 
+        if scenario.target_doctor and apt.doctor_id != scenario.target_doctor:
+            return TaskOutcomeResult(
+                scenario_id=scenario.scenario_id,
+                is_passed=False,
+                task_completed=False,
+                db_verified=False,
+                error_message=f"Doctor mismatch: expected '{scenario.target_doctor}', got '{apt.doctor_id}'.",
+            )
+
+        if scenario.expected_outcome != "ALTERNATIVE_ACCEPTED" and scenario.target_time and apt.start_time != scenario.target_time:
+            return TaskOutcomeResult(
+                scenario_id=scenario.scenario_id,
+                is_passed=False,
+                task_completed=False,
+                db_verified=False,
+                error_message=f"Appointment time mismatch: expected '{scenario.target_time}', got '{apt.start_time}'.",
+            )
+
+        if scenario.expected_outcome == "ALTERNATIVE_ACCEPTED" and apt.start_time == scenario.target_time:
+            return TaskOutcomeResult(
+                scenario_id=scenario.scenario_id,
+                is_passed=False,
+                task_completed=False,
+                db_verified=False,
+                error_message="Alternative booking retained the unavailable requested time.",
+            )
+
         # Verify patient record
         patient = db.query(Patient).filter(Patient.patient_id == apt.patient_id).first()
         if scenario.patient_name and patient:
