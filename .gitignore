@@ -32,6 +32,7 @@ logs/
 frontend/node_modules/
 frontend/build/
 frontend/dist/
+frontend/.vite/
 frontend/.next/
 frontend/.cache/
 frontend/*.tsbuildinfo

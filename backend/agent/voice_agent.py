@@ -7,13 +7,18 @@ Compliant with PRD Section 4, 5, 6, and 7.
 
 import asyncio
 import logging
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+# Ensure workspace root is on sys.path regardless of how script was invoked
+root_dir = Path(__file__).resolve().parent.parent.parent
+if str(root_dir) not in sys.path:
+    sys.path.insert(0, str(root_dir))
 
 from dotenv import load_dotenv
 
 # LiveKit's worker CLI reads credentials from process environment variables.
-# Pydantic Settings can read `.env` independently, but that does not populate
-# os.environ for the CLI runtime.
 load_dotenv(override=False)
 
 from livekit import rtc
@@ -63,9 +68,12 @@ def build_llm():
     if settings.LLM_PROVIDER == "gemini":
         if not settings.GEMINI_API_KEY:
             raise RuntimeError("LLM_PROVIDER is gemini but GEMINI_API_KEY is not configured")
-        logger.info(f"Using Gemini LLM: {settings.GEMINI_MODEL}")
+        model = settings.GEMINI_MODEL
+        if model in ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.0-flash"]:
+            model = "gemini-3.1-flash-lite"
+        logger.info(f"Using Gemini LLM: {model}")
         return openai.LLM(
-            model=settings.GEMINI_MODEL,
+            model=model,
             api_key=settings.GEMINI_API_KEY,
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
             temperature=0.2,
@@ -101,10 +109,14 @@ def build_tts():
     if settings.TTS_PROVIDER == "elevenlabs" and settings.ELEVENLABS_API_KEY:
         try:
             from livekit.plugins import elevenlabs
-            logger.info(f"Using ElevenLabs TTS (Voice: {settings.ELEVENLABS_VOICE_ID})")
+            voice_id = settings.ELEVENLABS_VOICE_ID
+            # Rachel (21m00Tcm4TlvDq8ikWAM) requires a paid tier; EXAVITQu4vr4xnSDxMaL (Bella) is free premade
+            if voice_id == "21m00Tcm4TlvDq8ikWAM":
+                voice_id = "EXAVITQu4vr4xnSDxMaL"
+            logger.info(f"Using ElevenLabs TTS (Voice: {voice_id})")
             return elevenlabs.TTS(
                 api_key=settings.ELEVENLABS_API_KEY,
-                voice_id=settings.ELEVENLABS_VOICE_ID,
+                voice_id=voice_id,
                 model_id=settings.ELEVENLABS_MODEL_ID,
             )
         except Exception as e:
