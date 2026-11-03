@@ -26,6 +26,7 @@ service_account.json
 data/
 recordings/
 traces/
+logs/
 
 # Node / Frontend
 frontend/node_modules/
