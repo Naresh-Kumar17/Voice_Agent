@@ -273,7 +273,7 @@ def main():
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
-            agent_name="clinical-voice-agent",
+            agent_name=settings.LIVEKIT_AGENT_NAME,
         )
     )
 

@@ -33,6 +33,7 @@ frontend/build/
 frontend/dist/
 frontend/.next/
 frontend/.cache/
+frontend/*.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

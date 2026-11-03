@@ -1,6 +1,6 @@
 """HTTP API for clinic operations, evaluation, and LiveKit access tokens."""
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -171,18 +171,43 @@ def cancel_appointment(appointment_id: str, reason: str = Query("Patient request
 
 
 @router.post("/livekit/token", response_model=LiveKitTokenResponse)
-def create_livekit_token():
+async def create_livekit_token():
     if not (settings.LIVEKIT_URL and settings.LIVEKIT_API_KEY and settings.LIVEKIT_API_SECRET):
         raise HTTPException(status_code=503, detail="LiveKit is not configured")
     identity = f"caller-{uuid4().hex}"
     # Use a fresh server-generated room for every anonymous token to prevent
     # a caller from joining a room selected or shared by another caller.
     room_name = f"clinical-{uuid4().hex}"
+    livekit_client = livekit_api.LiveKitAPI(
+        settings.LIVEKIT_URL,
+        settings.LIVEKIT_API_KEY,
+        settings.LIVEKIT_API_SECRET,
+    )
+    try:
+        await livekit_client.agent_dispatch.create_dispatch(
+            livekit_api.CreateAgentDispatchRequest(
+                agent_name=settings.LIVEKIT_AGENT_NAME,
+                room=room_name,
+            )
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Could not start the voice receptionist") from exc
+    finally:
+        await livekit_client.aclose()
+
     token = (
         livekit_api.AccessToken(settings.LIVEKIT_API_KEY, settings.LIVEKIT_API_SECRET)
         .with_identity(identity)
         .with_name("Clinic caller")
-        .with_grants(livekit_api.VideoGrants(room_join=True, room=room_name))
+        .with_ttl(timedelta(minutes=30))
+        .with_grants(livekit_api.VideoGrants(
+            room_join=True,
+            room=room_name,
+            can_publish=True,
+            can_publish_sources=["microphone"],
+            can_publish_data=False,
+            can_subscribe=True,
+        ))
         .to_jwt()
     )
     return LiveKitTokenResponse(

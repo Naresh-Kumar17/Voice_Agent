@@ -204,6 +204,8 @@ class EvaluationRunner:
                 trace_summary=json.dumps({
                     "notes": rep.notes,
                     "tool_calls": rep.tool_calls,
+                    "transcript": rep.transcript,
+                    "db_state_details": rep.db_state_details,
                 }),
             )
             db.add(eval_result)

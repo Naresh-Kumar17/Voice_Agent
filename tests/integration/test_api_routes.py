@@ -1,6 +1,8 @@
 """Integration tests for the FastAPI v1 contract using an isolated SQLite DB."""
 
+import json
 import pytest
+from unittest.mock import AsyncMock
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
@@ -124,6 +126,8 @@ def test_evaluation_routes(client):
     details = client.get(f"/api/v1/evaluations/runs/{run_id}")
     assert details.status_code == 200
     assert details.json()["results"][0]["scenario_id"] == "TC-027"
+    trace = json.loads(details.json()["results"][0]["trace_summary"])
+    assert trace["transcript"][0]["speaker"] == "patient"
     assert client.get("/api/v1/evaluations/runs/missing").status_code == 404
 
 
@@ -133,8 +137,38 @@ def test_livekit_token_requires_configuration_and_uses_fresh_room(client, monkey
     monkeypatch.setattr(settings, "LIVEKIT_URL", "wss://example.livekit.cloud")
     monkeypatch.setattr(settings, "LIVEKIT_API_KEY", "test-key")
     monkeypatch.setattr(settings, "LIVEKIT_API_SECRET", "test-secret-that-is-at-least-thirty-two-bytes")
+
+    class FakeDispatch:
+        def __init__(self):
+            self.create_dispatch = AsyncMock()
+
+    class FakeLiveKitAPI:
+        def __init__(self, *_args):
+            self.agent_dispatch = FakeDispatch()
+            self.aclose = AsyncMock()
+
+    dispatch_clients = []
+
+    def create_livekit_client(*args):
+        instance = FakeLiveKitAPI(*args)
+        dispatch_clients.append(instance)
+        return instance
+
+    monkeypatch.setattr("backend.api.routes.v1.livekit_api.LiveKitAPI", create_livekit_client)
     first = client.post("/api/v1/livekit/token", json={})
     second = client.post("/api/v1/livekit/token", json={})
     assert first.status_code == 200
     assert first.json()["room_name"] != second.json()["room_name"]
     assert "test-secret-that-is-at-least-thirty-two-bytes" not in first.text
+    assert len(dispatch_clients) == 2
+    for client_instance in dispatch_clients:
+        client_instance.agent_dispatch.create_dispatch.assert_awaited_once()
+        client_instance.aclose.assert_awaited_once()
+
+    failed_client = FakeLiveKitAPI()
+    failed_client.agent_dispatch.create_dispatch.side_effect = RuntimeError("upstream detail")
+    monkeypatch.setattr("backend.api.routes.v1.livekit_api.LiveKitAPI", lambda *_args: failed_client)
+    failed = client.post("/api/v1/livekit/token", json={})
+    assert failed.status_code == 503
+    assert "upstream detail" not in failed.text
+    failed_client.aclose.assert_awaited_once()

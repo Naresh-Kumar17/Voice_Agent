@@ -150,5 +150,7 @@ Repository audit and current state are recorded in `PROJECT_MEMORY.md`; phase ga
 - Phase 6 API foundation was added: `backend/main.py`, versioned routes in `backend/api/routes/v1.py`, and five integration tests. Phase 6 remains partial because no authentication/authorization or PHI access policy exists and real LiveKit is unverified.
 - Baseline 23 tests plus five API integration tests now pass: 28 passed; pytest emits one cache path permission warning.
 - No PRD or `prd.docs/` folder was present. Existing untracked `project_phases_Roadmap.md` was preserved.
-- No Git commit or push has yet been made for this work.
+- Phase 6 API foundation commit: `463908e`; no push was performed.
+
+Phase 6 API foundation was locally committed as `463908e` after the test suite passed. Phase 7 frontend foundation was subsequently added but remains uncommitted at this point; see the Phase 7 section in `PROJECT_MEMORY.md` for exact file scope, build result, and remaining checks.
 
