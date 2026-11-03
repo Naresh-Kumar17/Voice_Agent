@@ -212,3 +212,4 @@ python -c "from backend.database.connection import init_db; init_db()"
 - google-api-python-client 2.201.0 | google-auth-oauthlib 1.5.0
 - openai 3.42.1 | httpx 0.28.1
 - pytest 9.2.0 | pytest-asyncio 1.4.1
+

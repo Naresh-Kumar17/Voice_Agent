@@ -139,3 +139,4 @@ Agent CLI:    .venv\Scripts\python backend/agent/voice_agent.py dev
 DB Init:      .venv\Scripts\python -c "from backend.database.connection import init_db; init_db()"
 Git user:     Naresh-Kumar17 <vishnaninaresh8@gmail.com>
 ```
+
