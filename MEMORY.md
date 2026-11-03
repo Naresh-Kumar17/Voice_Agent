@@ -154,7 +154,9 @@ Repository audit and current state are recorded in `PROJECT_MEMORY.md`; phase ga
 
 Phase 6 API foundation was locally committed as `463908e` after the test suite passed. Phase 7 frontend foundation was subsequently added but remains uncommitted at this point; see the Phase 7 section in `PROJECT_MEMORY.md` for exact file scope, build result, and remaining checks.
 
-Correction/current update: Phase 7 was committed as `041e68a`; Phase 8 deployment files were committed as `ba88c17`. The final state and missing production gates are summarized in `PROJECT_MEMORY.md`; Docker could not be executed because the CLI is unavailable.
+Correction/current update: Phase 7 was committed as `041e68a`; Phase 8 deployment files were committed as `ba88c17`. LiveKit credentials were later added only to ignored local `.env`, and the token/dispatch flow verified. The final state and remaining gates are in `PROJECT_MEMORY.md`; Docker could not be executed because the CLI is unavailable.
 
-The user supplied a Gemini API key, stored only in ignored `.env`. `LLM_PROVIDER=gemini` now selects the Google OpenAI-compatible endpoint and `gemini-3.8-flash`. Local config and adapter tests pass; no outbound Gemini request was made. LiveKit URL/key/secret and STT/TTS provider keys remain unset, so the voice workflow still cannot start.
+The user supplied a Gemini API key, stored only in ignored `.env`. `LLM_PROVIDER=gemini` now selects the Google OpenAI-compatible endpoint and `gemini-3.8-flash`. Local config and adapter tests pass; no outbound Gemini request was made. LiveKit URL/key/secret are now configured locally and worker registration succeeded. STT/TTS provider keys remain unset, so conversation audio still needs configuration and testing.
+
+The worker CLI did not inherit `.env` values through Pydantic Settings alone. `load_dotenv()` was added to `voice_agent.py`; start it from the repo root with `python -m backend.agent.voice_agent dev`. API token creation and LiveKit Cloud dispatch are verified. Actual participant audio is not.
 

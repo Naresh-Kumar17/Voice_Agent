@@ -21,7 +21,7 @@ python -m pip install -r requirements.txt
 python -m uvicorn backend.main:app --reload --port 8000
 ```
 
-The API health endpoint is `GET /health`; interactive API documentation is at `/docs`. Start the worker in a second shell with `python backend/agent/voice_agent.py dev`. For the frontend, run `npm ci` and `npm run dev` from `frontend/`; the development server proxies API requests to port 8000.
+The API health endpoint is `GET /health`; interactive API documentation is at `/docs`. Start the worker in a second shell with `python -m backend.agent.voice_agent dev` from the repository root. For the frontend, run `npm ci` and `npm run dev` from `frontend/`; the development server proxies API requests to port 8000.
 
 Run validation with:
 

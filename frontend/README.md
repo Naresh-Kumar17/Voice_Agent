@@ -7,7 +7,7 @@ React + TypeScript + Vite interface for the LiveKit voice receptionist and evalu
 1. Install the Python dependencies and configure the backend `.env` using the root `.env.example`.
 2. Start the API: `uvicorn backend.main:app --reload --port 8000` from the repository root.
 3. Start the frontend: `npm install` then `npm run dev` from `frontend/`.
-4. Start the registered LiveKit worker with `python backend/agent/voice_agent.py dev` and configure `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and matching `LIVEKIT_AGENT_NAME`.
+4. Start the registered LiveKit worker from the repository root with `python -m backend.agent.voice_agent dev` and configure `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and matching `LIVEKIT_AGENT_NAME`.
 5. Open the Vite URL (normally `http://localhost:5173`). Vite proxies `/api` and `/health` to the API during development.
 
 For a separate production API host, set `VITE_API_BASE_URL` at build time. The browser requests a short lived participant token from the API and never receives the LiveKit API secret.

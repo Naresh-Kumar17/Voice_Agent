@@ -16,7 +16,7 @@ Development is at the start of Phase 6. Five feature commits exist through evalu
 | 4 | Phase 1 gap closure: migration history and supported DB dependencies | Before production deployment; preserve current SQLite data | Alembic migration upgrades a clean DB and current schema; PostgreSQL dependency is declared; tests validate schema creation and upgrade without dropping user data. |
 | 5 | Phase 2 reliability: calendar errors, cancellation/reschedule compensation and input edges | Before production; can proceed alongside phases | Calendar outage never reports false availability; create/delete failures preserve or flag reconciliation state; date/time/phone validation returns controlled errors; tests cover partial failures and audit outcomes. |
 | 6 | Phase 3 conversation completion | Before production voice workflow acceptance | Reschedule intent is end-to-end; state transitions reject invalid moves; safety regression tests include varied phrasing and false-positive checks; limitations are explicit. |
-| 7 | Phase 4 provider verification | Requires provider credentials and LiveKit room | Mock lifecycle test covers connection, participant, session and failures; credentialed smoke test establishes real audio path; remove dummy-key success appearance and report missing config clearly. |
+| 7 | Phase 4 provider verification | LiveKit project configured; requires speech-provider credentials and participant audio | Worker registers and accepts explicit dispatch; verify room connection, STT/TTS session and audio response; remove dummy-key success appearance and report missing config clearly. |
 | 8 | Phase 5 evaluation completeness | Before claiming the 35-scenario requirement | TC-001–TC-035 are defined or source requirements are revised; evaluator checks outcome, arguments, calendar and safety; runner records failures reliably; critical suites pass through the intended voice/runtime path where feasible. |
 
 ## Risks and sequencing constraints
@@ -24,7 +24,7 @@ Development is at the start of Phase 6. Five feature commits exist through evalu
 - Phase 7 depends on a stable Phase 6 token and evaluation response schema.
 - Phase 8 production deployment depends on resolving DB migrations, provider configuration, and calendar failure semantics.
 - The source PRD is absent; do not invent new product behavior beyond the available phase roadmap/context. In particular, API authorization and PHI listing policy require an explicit project decision before exposing patient data broadly.
-- Live Google Calendar and LiveKit verification cannot be claimed without configured credentials and external services.
+- LiveKit token and worker dispatch have been verified against Cloud; real browser/audio and speech-provider behavior remain unverified. Live Google Calendar also remains unconfigured.
 - Keep `clinical_agent.db` and the pre-existing untracked `project_phases_Roadmap.md` intact.
 
 ## Milestone record
@@ -51,7 +51,7 @@ Development is at the start of Phase 6. Five feature commits exist through evalu
 - Files changed: `frontend/` app and package lock, `backend/api/routes/v1.py`, `backend/agent/voice_agent.py`, `config/settings.py`, `evaluation/runner.py`, `tests/integration/test_api_routes.py`, `.env.example`.
 - Tests: `npm run build` -> passed (one Vite chunk-size warning: 815.26 KB minified JS); `.venv\Scripts\python.exe -m pytest -q` -> 28 passed, one pytest cache permission warning.
 - Commit: `041e68a` (`feat(frontend): add voice client and evaluation dashboard`).
-- Remaining: no browser interaction or live LiveKit test (service credentials/worker unavailable); orb is a connection/speaking indicator, not a waveform; simulated transcript persisted in trace; bundle needs code splitting. Phase 7 is partial.
+- Remaining: no browser audio/transcription test; Deepgram/ElevenLabs or OpenAI STT/TTS credentials are absent; orb is a connection/speaking indicator, not a waveform; simulated transcript persisted in trace; bundle needs code splitting. LiveKit Cloud token and worker dispatch have been verified. Phase 7 is partial.
 
 ### Phase 8 deployment foundation
 
@@ -65,4 +65,10 @@ Development is at the start of Phase 6. Five feature commits exist through evalu
 
 - Completed: Gemini model selection now uses the configured key and Google OpenAI-compatible endpoint; selected current stable model; local `.env` loads the user-provided key and remains ignored by Git.
 - Validation: two local configuration tests; full Python suite 30 passed. No external Gemini request was made.
-- Remaining: LiveKit and STT/TTS credentials are still missing; live voice cannot connect. Verify Gemini once the user chooses to test an external request.
+- Remaining: LiveKit is configured and worker registration/dispatch succeeded. STT/TTS credentials remain missing, so live conversation audio is not yet validated. No Gemini API request was made.
+
+### LiveKit local setup
+
+- Completed: credentials were placed only in ignored local `.env`; API restarted; `.env` loading was added to `voice_agent.py` because the worker CLI reads OS environment variables; corrected worker commands to module invocation in root/frontend README and Compose.
+- Verification: local token endpoint successfully called LiveKit Cloud, returned a room token, and dispatched the named worker. Worker log confirms registration and job assignment. Three empty rooms created during setup checks were deleted.
+- Remaining: user must provide/configure STT and TTS provider credentials and test from the browser; actual audio has not been verified.

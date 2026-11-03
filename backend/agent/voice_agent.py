@@ -9,6 +9,13 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
+from dotenv import load_dotenv
+
+# LiveKit's worker CLI reads credentials from process environment variables.
+# Pydantic Settings can read `.env` independently, but that does not populate
+# os.environ for the CLI runtime.
+load_dotenv(override=False)
+
 from livekit import rtc
 from livekit.agents import (
     Agent,

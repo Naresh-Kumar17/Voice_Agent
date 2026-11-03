@@ -47,7 +47,7 @@ services:
   agent:
     build: .
     restart: unless-stopped
-    command: ["python", "backend/agent/voice_agent.py", "start"]
+    command: ["python", "-m", "backend.agent.voice_agent", "start"]
     environment:
       APP_ENV: ${APP_ENV:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
