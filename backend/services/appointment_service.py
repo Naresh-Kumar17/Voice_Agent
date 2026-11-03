@@ -46,6 +46,16 @@ class AppointmentService:
     def _format_time(self, dt: datetime) -> str:
         return dt.strftime("%H:%M")
 
+    def _verify_event(self, doctor_id: str, event_id: str, date: str, start: str, end: str) -> None:
+        event = self.calendar_service.get_event(doctor_id, event_id)
+        if not event or any(event.get(key) != value for key, value in
+                            (("date", date), ("start", start), ("end", end))):
+            raise ConnectionError("Calendar verification failed: the saved event does not match the appointment.")
+
+    def _verify_deleted(self, doctor_id: str, event_id: str) -> None:
+        if self.calendar_service.get_event(doctor_id, event_id) is not None:
+            raise ConnectionError("Calendar verification failed: the deleted event is still present.")
+
     def calculate_slots(self, doctor: Doctor, date_str: str) -> List[str]:
         """
         Generate all valid appointment slots for a doctor on a given date,
@@ -241,8 +251,18 @@ class AppointmentService:
                 end_time=end_time_str,
                 summary=summary,
             )
+            if not calendar_event_id:
+                raise ConnectionError("Calendar did not return an event id.")
+            self._verify_event(doctor.doctor_id, calendar_event_id,
+                               request.appointment_date, start_time_str, end_time_str)
         except Exception as e:
             logger.error(f"Failed to create Google Calendar event: {e}")
+            if calendar_event_id:
+                try:
+                    self.calendar_service.delete_event(doctor.doctor_id, calendar_event_id)
+                    self._verify_deleted(doctor.doctor_id, calendar_event_id)
+                except Exception:
+                    logger.exception("Failed to remove unverified calendar event %s", calendar_event_id)
             raise ConnectionError(f"Scheduling system unavailable: {e}")
 
         # 6. Database Record Creation
@@ -332,8 +352,10 @@ class AppointmentService:
         if apt.calendar_event_id:
             try:
                 self.calendar_service.delete_event(apt.doctor_id, apt.calendar_event_id)
+                self._verify_deleted(apt.doctor_id, apt.calendar_event_id)
             except Exception as e:
-                logger.error(f"Failed to delete calendar event for {appointment_id}: {e}")
+                logger.error(f"Calendar cancellation verification failed for {appointment_id}: {e}")
+                return False
 
         self.appointment_repo.cancel(appointment_id)
         self.audit_repo.log(
@@ -378,15 +400,8 @@ class AppointmentService:
         patient_name = patient.full_name if patient else "Patient"
         phone_number = patient.phone_number if patient else ""
 
-        # Remove old calendar event
+        # Create and verify the replacement before removing the current event.
         old_calendar_event_id = apt.calendar_event_id
-        if old_calendar_event_id:
-            try:
-                self.calendar_service.delete_event(doctor.doctor_id, old_calendar_event_id)
-            except Exception as e:
-                logger.warning(f"Failed to delete old calendar event {old_calendar_event_id}: {e}")
-
-        # Create new calendar event
         summary = f"Rescheduled: {patient_name} with {doctor.doctor_name}"
         new_calendar_event_id = None
         try:
@@ -399,9 +414,32 @@ class AppointmentService:
                 end_time=new_end_str,
                 summary=summary,
             )
+            if not new_calendar_event_id:
+                raise ConnectionError("Calendar did not return an event id.")
+            self._verify_event(doctor.doctor_id, new_calendar_event_id,
+                               new_date, new_start_str, new_end_str)
         except Exception as e:
             logger.error(f"Failed to create new calendar event during reschedule: {e}")
+            if new_calendar_event_id:
+                try:
+                    self.calendar_service.delete_event(doctor.doctor_id, new_calendar_event_id)
+                    self._verify_deleted(doctor.doctor_id, new_calendar_event_id)
+                except Exception:
+                    logger.exception("Failed to remove unverified replacement event %s", new_calendar_event_id)
             raise ConnectionError(f"Scheduling system unavailable: {e}")
+
+        if old_calendar_event_id:
+            try:
+                self.calendar_service.delete_event(doctor.doctor_id, old_calendar_event_id)
+                self._verify_deleted(doctor.doctor_id, old_calendar_event_id)
+            except Exception as e:
+                logger.error("Could not verify old calendar event removal during reschedule: %s", e)
+                try:
+                    self.calendar_service.delete_event(doctor.doctor_id, new_calendar_event_id)
+                    self._verify_deleted(doctor.doctor_id, new_calendar_event_id)
+                except Exception:
+                    logger.exception("Failed to roll back replacement calendar event %s", new_calendar_event_id)
+                raise ConnectionError("Reschedule failed because the previous calendar event could not be verified as deleted.") from e
 
         # Update appointment record
         apt.appointment_date = new_date
