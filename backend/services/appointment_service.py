@@ -301,6 +301,28 @@ class AppointmentService:
             message=f"Appointment successfully confirmed with {doctor.doctor_name} on {appointment.appointment_date} at {appointment.start_time}.",
         )
 
+    def get_appointment(self, appointment_id: str) -> Optional[AppointmentResponse]:
+        apt = self.appointment_repo.get_by_id(appointment_id)
+        if not apt:
+            return None
+        doctor = self.doctor_repo.get_by_id(apt.doctor_id)
+        patient = self.patient_repo.get_by_id(apt.patient_id)
+        return AppointmentResponse(
+            appointment_id=apt.appointment_id,
+            patient_id=apt.patient_id,
+            patient_name=patient.full_name if patient else "Unknown",
+            contact_number=patient.phone_number if patient else "Unknown",
+            doctor_id=apt.doctor_id,
+            doctor_name=doctor.doctor_name if doctor else "Doctor",
+            appointment_date=apt.appointment_date,
+            start_time=apt.start_time,
+            end_time=apt.end_time,
+            appointment_type=apt.appointment_type,
+            status=apt.status,
+            calendar_event_id=apt.calendar_event_id,
+            message=f"Appointment {apt.appointment_id} with {doctor.doctor_name if doctor else 'Doctor'} on {apt.appointment_date} at {apt.start_time} (Status: {apt.status}).",
+        )
+
     def cancel_appointment(self, appointment_id: str, reason: str = "") -> bool:
         apt = self.appointment_repo.get_by_id(appointment_id)
         if not apt or apt.status == "CANCELLED":
@@ -323,3 +345,100 @@ class AppointmentService:
             metadata={"reason": reason},
         )
         return True
+
+    def reschedule_appointment(
+        self,
+        appointment_id: str,
+        new_date: str,
+        new_time: str,
+    ) -> AppointmentResponse:
+        apt = self.appointment_repo.get_by_id(appointment_id)
+        if not apt:
+            raise ValueError(f"Appointment '{appointment_id}' not found.")
+        if apt.status == "CANCELLED":
+            raise ValueError(f"Appointment '{appointment_id}' is cancelled and cannot be rescheduled.")
+
+        doctor = self.doctor_repo.get_by_id(apt.doctor_id)
+        if not doctor:
+            raise ValueError(f"Doctor '{apt.doctor_id}' not found.")
+
+        # Normalize new time
+        new_start_dt = self._parse_time(new_time)
+        duration = timedelta(minutes=settings.DEFAULT_APPOINTMENT_DURATION_MINUTES)
+        new_end_dt = new_start_dt + duration
+        new_start_str = self._format_time(new_start_dt)
+        new_end_str = self._format_time(new_end_dt)
+
+        # Check availability
+        available_slots = self.calculate_slots(doctor, new_date)
+        if new_start_str not in available_slots:
+            raise ValueError(f"Slot {new_start_str} on {new_date} is not available for {doctor.doctor_name}.")
+
+        patient = self.patient_repo.get_by_id(apt.patient_id)
+        patient_name = patient.full_name if patient else "Patient"
+        phone_number = patient.phone_number if patient else ""
+
+        # Remove old calendar event
+        old_calendar_event_id = apt.calendar_event_id
+        if old_calendar_event_id:
+            try:
+                self.calendar_service.delete_event(doctor.doctor_id, old_calendar_event_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete old calendar event {old_calendar_event_id}: {e}")
+
+        # Create new calendar event
+        summary = f"Rescheduled: {patient_name} with {doctor.doctor_name}"
+        new_calendar_event_id = None
+        try:
+            new_calendar_event_id = self.calendar_service.create_event(
+                doctor_id=doctor.doctor_id,
+                patient_name=patient_name,
+                contact_number=phone_number,
+                date_str=new_date,
+                start_time=new_start_str,
+                end_time=new_end_str,
+                summary=summary,
+            )
+        except Exception as e:
+            logger.error(f"Failed to create new calendar event during reschedule: {e}")
+            raise ConnectionError(f"Scheduling system unavailable: {e}")
+
+        # Update appointment record
+        apt.appointment_date = new_date
+        apt.start_time = new_start_str
+        apt.end_time = new_end_str
+        apt.calendar_event_id = new_calendar_event_id
+        apt.status = "CONFIRMED"
+        self.db.commit()
+        self.db.refresh(apt)
+
+        # Audit log
+        self.audit_repo.log(
+            actor="SYSTEM",
+            action="RESCHEDULE_APPOINTMENT",
+            resource_type="APPOINTMENT",
+            resource_id=appointment_id,
+            result="RESCHEDULED",
+            metadata={
+                "new_date": new_date,
+                "new_time": new_start_str,
+                "old_calendar_event_id": old_calendar_event_id,
+                "new_calendar_event_id": new_calendar_event_id,
+            },
+        )
+
+        return AppointmentResponse(
+            appointment_id=apt.appointment_id,
+            patient_id=apt.patient_id,
+            patient_name=patient_name,
+            contact_number=phone_number,
+            doctor_id=doctor.doctor_id,
+            doctor_name=doctor.doctor_name,
+            appointment_date=apt.appointment_date,
+            start_time=apt.start_time,
+            end_time=apt.end_time,
+            appointment_type=apt.appointment_type,
+            status=apt.status,
+            calendar_event_id=apt.calendar_event_id,
+            message=f"Appointment successfully rescheduled to {new_date} at {new_start_str} with {doctor.doctor_name}.",
+        )
