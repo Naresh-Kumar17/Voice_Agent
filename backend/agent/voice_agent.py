@@ -9,6 +9,13 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
+from dotenv import load_dotenv
+
+# LiveKit's worker CLI reads credentials from process environment variables.
+# Pydantic Settings can read `.env` independently, but that does not populate
+# os.environ for the CLI runtime.
+load_dotenv(override=False)
+
 from livekit import rtc
 from livekit.agents import (
     Agent,
@@ -52,6 +59,17 @@ def build_llm():
             api_key=settings.GROQ_API_KEY,
             base_url="https://api.groq.com/openai/v1",
             temperature=0.2,
+        )
+    if settings.LLM_PROVIDER == "gemini":
+        if not settings.GEMINI_API_KEY:
+            raise RuntimeError("LLM_PROVIDER is gemini but GEMINI_API_KEY is not configured")
+        logger.info(f"Using Gemini LLM: {settings.GEMINI_MODEL}")
+        return openai.LLM(
+            model=settings.GEMINI_MODEL,
+            api_key=settings.GEMINI_API_KEY,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            temperature=0.2,
+            extra_headers={"x-goog-api-client": "clinical-voice-agent/1.0.0"},
         )
     logger.info(f"Using OpenAI LLM: {settings.OPENAI_MODEL}")
     return openai.LLM(
@@ -273,7 +291,7 @@ def main():
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
-            agent_name="clinical-voice-agent",
+            agent_name=settings.LIVEKIT_AGENT_NAME,
         )
     )
 

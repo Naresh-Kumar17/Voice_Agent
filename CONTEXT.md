@@ -212,3 +212,14 @@ python -c "from backend.database.connection import init_db; init_db()"
 - google-api-python-client 2.201.0 | google-auth-oauthlib 1.5.0
 - openai 3.42.1 | httpx 0.28.1
 - pytest 9.2.0 | pytest-asyncio 1.4.1
+
+---
+
+## Ownership Handoff Status — 2026-11-03
+
+This addendum supersedes the phase/branch snapshot above while retaining its original history. At initial audit the current branch was `dev/clinical-voice-agent-v1` at `229f7c5`; verified Phase 6 API foundation was committed as `463908e`. API integration coverage was added in `tests/integration/test_api_routes.py`. Full suite: 28 passed with one pytest cache permission warning. Phase 6 remains incomplete pending authentication/authorization and PHI access policy, plus a real LiveKit smoke test. See `PROJECT_MEMORY.md`, `DEVELOPMENT_ROADMAP.md`, and `phases.md` for the audit and remaining acceptance gates. No `prd.md` or `prd.docs/` directory was found in the repository.
+
+Phase 7 now has a partial React + TypeScript + Vite frontend in `frontend/` (commit `041e68a`). `npm run build` passes with a large bundle warning; live browser/LiveKit verification is outstanding. The token route dispatches the configured named worker and grants a 30-minute token limited to microphone publish and subscription. Phase 8 Docker/Compose and runbook files are committed as `ba88c17`. Docker CLI is unavailable. `project_phases_Roadmap.md` remains pre-existing untracked user content.
+
+Gemini LLM support is wired through Google's OpenAI-compatible endpoint; the supplied key is present only in ignored local `.env`. Settings load `LLM_PROVIDER=gemini` and `gemini-3.8-flash`; no Gemini request was made. LiveKit URL/key/secret are now configured locally; after restarting the API, token generation and named-agent dispatch succeeded against Cloud. Worker `.env` loading was fixed with `load_dotenv()` and the worker registered. STT/TTS provider credentials are still missing, so actual spoken conversation is not ready. Run the worker with `python -m backend.agent.voice_agent dev` from the repository root.
+

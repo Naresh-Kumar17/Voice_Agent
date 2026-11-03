@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     LIVEKIT_URL: str = Field(default="", description="LiveKit server WebSocket URL")
     LIVEKIT_API_KEY: str = Field(default="", description="LiveKit API Key")
     LIVEKIT_API_SECRET: str = Field(default="", description="LiveKit API Secret")
+    LIVEKIT_AGENT_NAME: str = Field(default="clinical-voice-agent", description="Registered LiveKit agent name for room dispatch")
 
     # LLM Provider selection
     LLM_PROVIDER: Literal["groq", "openai", "gemini"] = "groq"
@@ -49,7 +50,7 @@ class Settings(BaseSettings):
     
     # Google Gemini
     GEMINI_API_KEY: str = Field(default="", description="Google Gemini API Key")
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
 
     # Speech-to-Text (STT) Provider
     STT_PROVIDER: Literal["deepgram", "openai", "groq"] = "deepgram"

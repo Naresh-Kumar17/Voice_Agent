@@ -139,3 +139,24 @@ Agent CLI:    .venv\Scripts\python backend/agent/voice_agent.py dev
 DB Init:      .venv\Scripts\python -c "from backend.database.connection import init_db; init_db()"
 Git user:     Naresh-Kumar17 <vishnaninaresh8@gmail.com>
 ```
+
+---
+
+## Ownership Handoff Update — 2026-11-03
+
+Repository audit and current state are recorded in `PROJECT_MEMORY.md`; phase gates are in `DEVELOPMENT_ROADMAP.md` and `phases.md`. This update preserves the prior memory record above.
+
+- Current branch is `dev/clinical-voice-agent-v1` at `229f7c5` (the older context below incorrectly called it `main`).
+- Phase 6 API foundation was added: `backend/main.py`, versioned routes in `backend/api/routes/v1.py`, and five integration tests. Phase 6 remains partial because no authentication/authorization or PHI access policy exists and real LiveKit is unverified.
+- Baseline 23 tests plus five API integration tests now pass: 28 passed; pytest emits one cache path permission warning.
+- No PRD or `prd.docs/` folder was present. Existing untracked `project_phases_Roadmap.md` was preserved.
+- Phase 6 API foundation commit: `463908e`; no push was performed.
+
+Phase 6 API foundation was locally committed as `463908e` after the test suite passed. Phase 7 frontend foundation was subsequently added but remains uncommitted at this point; see the Phase 7 section in `PROJECT_MEMORY.md` for exact file scope, build result, and remaining checks.
+
+Correction/current update: Phase 7 was committed as `041e68a`; Phase 8 deployment files were committed as `ba88c17`. LiveKit credentials were later added only to ignored local `.env`, and the token/dispatch flow verified. The final state and remaining gates are in `PROJECT_MEMORY.md`; Docker could not be executed because the CLI is unavailable.
+
+The user supplied a Gemini API key, stored only in ignored `.env`. `LLM_PROVIDER=gemini` now selects the Google OpenAI-compatible endpoint and `gemini-3.8-flash`. Local config and adapter tests pass; no outbound Gemini request was made. LiveKit URL/key/secret are now configured locally and worker registration succeeded. STT/TTS provider keys remain unset, so conversation audio still needs configuration and testing.
+
+The worker CLI did not inherit `.env` values through Pydantic Settings alone. `load_dotenv()` was added to `voice_agent.py`; start it from the repo root with `python -m backend.agent.voice_agent dev`. API token creation and LiveKit Cloud dispatch are verified. Actual participant audio is not.
+

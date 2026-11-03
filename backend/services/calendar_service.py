@@ -34,6 +34,11 @@ class CalendarEvent(ABC):
 
 class BaseCalendarService(ABC):
     @abstractmethod
+    def get_event(self, doctor_id: str, calendar_event_id: str) -> Optional[Dict[str, str]]:
+        """Read an event by id, returning None when it does not exist."""
+        pass
+
+    @abstractmethod
     def get_busy_intervals(self, doctor_id: str, date_str: str) -> List[Dict[str, str]]:
         """Return list of busy intervals [{'start': '10:00', 'end': '10:30'}] in clinic timezone."""
         pass
@@ -90,6 +95,12 @@ class MockCalendarService(BaseCalendarService):
             for evt in events
             if evt.get("date") == date_str
         ]
+
+    def get_event(self, doctor_id: str, calendar_event_id: str) -> Optional[Dict[str, str]]:
+        if self.simulate_api_failure:
+            raise ConnectionError("Calendar event lookup failed (simulated 503)")
+        return next((dict(evt) for evt in self._events.get(doctor_id, [])
+                     if evt.get("event_id") == calendar_event_id), None)
 
     def create_event(
         self,
@@ -195,6 +206,41 @@ class GoogleCalendarService(BaseCalendarService):
                 "end": end_dt.strftime("%H:%M"),
             })
         return busy_intervals
+
+    def get_event(self, doctor_id: str, calendar_event_id: str) -> Optional[Dict[str, str]]:
+        if not self._service:
+            raise ConnectionError("Google Calendar API is not configured.")
+        from googleapiclient.errors import HttpError
+        try:
+            event = self._service.events().get(
+                calendarId=settings.GOOGLE_CALENDAR_ID, eventId=calendar_event_id
+            ).execute()
+        except HttpError as exc:
+            if getattr(exc, "resp", None) is not None and exc.resp.status == 404:
+                return None
+            raise
+
+        tz = pytz.timezone(settings.CLINIC_TIMEZONE)
+        start_raw = event.get("start", {})
+        end_raw = event.get("end", {})
+        start_text = start_raw.get("dateTime")
+        end_text = end_raw.get("dateTime")
+        if start_text and end_text:
+            start_dt = datetime.fromisoformat(start_text.replace("Z", "+00:00"))
+            end_dt = datetime.fromisoformat(end_text.replace("Z", "+00:00"))
+            if start_dt.tzinfo is None:
+                start_dt = tz.localize(start_dt)
+            if end_dt.tzinfo is None:
+                end_dt = tz.localize(end_dt)
+            start_dt, end_dt = start_dt.astimezone(tz), end_dt.astimezone(tz)
+            return {"event_id": event.get("id", calendar_event_id),
+                    "date": start_dt.strftime("%Y-%m-%d"),
+                    "start": start_dt.strftime("%H:%M"), "end": end_dt.strftime("%H:%M"),
+                    "summary": event.get("summary", "")}
+        # All-day events cannot be a valid timed appointment; return their date for mismatch detection.
+        return {"event_id": event.get("id", calendar_event_id),
+                "date": start_raw.get("date", ""), "start": "", "end": "",
+                "summary": event.get("summary", "")}
 
     def create_event(
         self,

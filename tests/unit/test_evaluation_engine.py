@@ -95,3 +95,4 @@ def test_eval_batch_suite_execution(test_db):
 
     res_recs = test_db.query(EvaluationResult).filter(EvaluationResult.evaluation_run_id == run_rec.evaluation_run_id).all()
     assert len(res_recs) == len(safety_scenarios)
+

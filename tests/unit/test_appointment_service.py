@@ -88,6 +88,26 @@ def test_book_appointment_success(test_db, mock_calendar):
     assert resp.patient_name == "Alice Smith"
     assert resp.start_time == "10:00"
     assert resp.calendar_event_id is not None
+    event = mock_calendar.get_event("DOC-TEST-1", resp.calendar_event_id)
+    assert (event["date"], event["start"], event["end"]) == ("2026-11-03", "10:00", "10:30")
+
+
+def test_booking_rejects_calendar_event_that_does_not_match(test_db, mock_calendar, monkeypatch):
+    original_get = mock_calendar.get_event
+
+    def mismatched_event(doctor_id, event_id):
+        event = original_get(doctor_id, event_id)
+        if event:
+            event["start"] = "11:00"
+        return event
+
+    monkeypatch.setattr(mock_calendar, "get_event", mismatched_event)
+    service = AppointmentService(test_db, calendar_service=mock_calendar)
+    req = AppointmentCreate(patient_name="A", contact_number="555", doctor_id="DOC-TEST-1",
+                           appointment_date="2026-11-03", appointment_time="10:00")
+    with pytest.raises(ConnectionError, match="verification failed"):
+        service.book_appointment(req)
+    assert mock_calendar.get_busy_intervals("DOC-TEST-1", "2026-11-03") == []
 
 
 def test_book_appointment_idempotency(test_db, mock_calendar):
@@ -141,8 +161,31 @@ def test_cancel_appointment(test_db, mock_calendar):
     created = service.book_appointment(req)
     cancelled = service.cancel_appointment(created.appointment_id)
     assert cancelled is True
+    assert mock_calendar.get_event("DOC-TEST-1", created.calendar_event_id) is None
 
     # Check slot is now available again
     res = service.check_availability("DOC-TEST-1", "2026-11-03", "11:30")
     assert res.requested_time_available is True
+
+
+def test_cancel_does_not_report_success_if_event_remains(test_db, mock_calendar, monkeypatch):
+    service = AppointmentService(test_db, calendar_service=mock_calendar)
+    req = AppointmentCreate(patient_name="Dana", contact_number="555", doctor_id="DOC-TEST-1",
+                           appointment_date="2026-11-03", appointment_time="11:30")
+    created = service.book_appointment(req)
+    monkeypatch.setattr(mock_calendar, "delete_event", lambda *_: True)
+    assert service.cancel_appointment(created.appointment_id) is False
+    assert mock_calendar.get_event("DOC-TEST-1", created.calendar_event_id) is not None
+    assert service.get_appointment(created.appointment_id).status == "CONFIRMED"
+
+
+def test_reschedule_verifies_new_event_and_removes_old(test_db, mock_calendar):
+    service = AppointmentService(test_db, calendar_service=mock_calendar)
+    req = AppointmentCreate(patient_name="Eve", contact_number="555", doctor_id="DOC-TEST-1",
+                           appointment_date="2026-11-03", appointment_time="09:00")
+    created = service.book_appointment(req)
+    updated = service.reschedule_appointment(created.appointment_id, "2026-11-04", "09:00")
+    assert mock_calendar.get_event("DOC-TEST-1", created.calendar_event_id) is None
+    new_event = mock_calendar.get_event("DOC-TEST-1", updated.calendar_event_id)
+    assert (new_event["date"], new_event["start"], new_event["end"]) == ("2026-11-04", "09:00", "09:30")
 
