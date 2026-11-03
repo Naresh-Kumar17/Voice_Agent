@@ -154,3 +154,5 @@ Repository audit and current state are recorded in `PROJECT_MEMORY.md`; phase ga
 
 Phase 6 API foundation was locally committed as `463908e` after the test suite passed. Phase 7 frontend foundation was subsequently added but remains uncommitted at this point; see the Phase 7 section in `PROJECT_MEMORY.md` for exact file scope, build result, and remaining checks.
 
+Correction/current update: Phase 7 was committed as `041e68a`. Phase 8 Docker/Compose and runbook files are present but uncommitted. The final state and missing production gates are summarized in `PROJECT_MEMORY.md`; Docker could not be executed because the CLI is unavailable.
+
