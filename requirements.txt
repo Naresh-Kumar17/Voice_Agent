@@ -1,0 +1,39 @@
+# Clinical Voice Agent - Core Dependencies
+# Compatible with Python 3.10 - 3.12
+
+# Web & API Framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.9.0
+pydantic-settings>=2.6.0
+python-multipart>=0.0.12
+
+# Database & Persistence
+sqlalchemy>=2.0.36
+alembic>=1.14.0
+
+# HTTP & Async Clients
+httpx>=0.27.0
+aiohttp>=3.10.0
+python-dotenv>=1.0.1
+python-dateutil>=2.9.0
+pytz>=2024.2
+
+# Calendar Integrations
+google-api-python-client>=2.150.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.2.1
+
+# Real-Time Voice & LiveKit Pipeline
+livekit>=0.18.0
+livekit-agents>=0.12.0
+livekit-plugins-openai>=0.10.0
+livekit-plugins-deepgram>=0.7.0
+livekit-plugins-elevenlabs>=0.7.0
+livekit-plugins-silero>=0.7.0
+
+# Testing & Evaluation Framework
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+rich>=13.9.0
+
