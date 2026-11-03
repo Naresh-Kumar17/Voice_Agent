@@ -2,8 +2,9 @@
 Pydantic Schemas for Clinical Voice Agent API and Tool Contracts.
 """
 
+from datetime import date
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class PatientCreate(BaseModel):
@@ -36,8 +37,14 @@ class TimeSlot(BaseModel):
 
 class AvailabilityRequest(BaseModel):
     doctor_id: str = Field(..., description="ID of the doctor (e.g. DOC-001)")
-    appointment_date: str = Field(..., description="Appointment date in YYYY-MM-DD format")
-    preferred_time: Optional[str] = Field(None, description="Preferred time in HH:MM format")
+    appointment_date: str = Field(..., description="Appointment date in YYYY-MM-DD format", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    preferred_time: Optional[str] = Field(None, description="Preferred time in HH:MM format", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+
+    @field_validator("appointment_date")
+    @classmethod
+    def validate_appointment_date(cls, value: str) -> str:
+        date.fromisoformat(value)
+        return value
 
 
 class AvailabilityResponse(BaseModel):
@@ -55,11 +62,17 @@ class AppointmentCreate(BaseModel):
     patient_name: str = Field(..., description="Full patient name")
     contact_number: str = Field(..., description="Patient phone number")
     doctor_id: str = Field(..., description="Doctor ID (e.g. DOC-001)")
-    appointment_date: str = Field(..., description="Date in YYYY-MM-DD format")
-    appointment_time: str = Field(..., description="Start time in HH:MM format")
+    appointment_date: str = Field(..., description="Date in YYYY-MM-DD format", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    appointment_time: str = Field(..., description="Start time in HH:MM format", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     appointment_type: str = Field("General Consultation", description="Reason or consultation type")
     idempotency_key: Optional[str] = Field(None, description="Unique key to avoid duplicate bookings")
     notes: Optional[str] = Field(None, description="Additional context or symptoms")
+
+    @field_validator("appointment_date")
+    @classmethod
+    def validate_appointment_date(cls, value: str) -> str:
+        date.fromisoformat(value)
+        return value
 
 
 class AppointmentResponse(BaseModel):

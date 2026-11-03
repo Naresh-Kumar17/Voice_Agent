@@ -140,3 +140,15 @@ DB Init:      .venv\Scripts\python -c "from backend.database.connection import i
 Git user:     Naresh-Kumar17 <vishnaninaresh8@gmail.com>
 ```
 
+---
+
+## Ownership Handoff Update — 2026-11-03
+
+Repository audit and current state are recorded in `PROJECT_MEMORY.md`; phase gates are in `DEVELOPMENT_ROADMAP.md` and `phases.md`. This update preserves the prior memory record above.
+
+- Current branch is `dev/clinical-voice-agent-v1` at `229f7c5` (the older context below incorrectly called it `main`).
+- Phase 6 API foundation was added: `backend/main.py`, versioned routes in `backend/api/routes/v1.py`, and five integration tests. Phase 6 remains partial because no authentication/authorization or PHI access policy exists and real LiveKit is unverified.
+- Baseline 23 tests plus five API integration tests now pass: 28 passed; pytest emits one cache path permission warning.
+- No PRD or `prd.docs/` folder was present. Existing untracked `project_phases_Roadmap.md` was preserved.
+- No Git commit or push has yet been made for this work.
+

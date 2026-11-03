@@ -213,3 +213,9 @@ python -c "from backend.database.connection import init_db; init_db()"
 - openai 3.42.1 | httpx 0.28.1
 - pytest 9.2.0 | pytest-asyncio 1.4.1
 
+---
+
+## Ownership Handoff Status — 2026-11-03
+
+This addendum supersedes the phase/branch snapshot above while retaining its original history. The current branch is `dev/clinical-voice-agent-v1` at `229f7c5`. Phase 6 has a partial FastAPI implementation in `backend/main.py` and `backend/api/routes/v1.py`; API integration coverage was added in `tests/integration/test_api_routes.py`. Full suite: 28 passed with one pytest cache permission warning. Phase 6 remains incomplete pending authentication/authorization and PHI access policy, plus a real LiveKit smoke test. See `PROJECT_MEMORY.md`, `DEVELOPMENT_ROADMAP.md`, and `phases.md` for the audit and remaining acceptance gates. No `prd.md` or `prd.docs/` directory was found in the repository.
+
