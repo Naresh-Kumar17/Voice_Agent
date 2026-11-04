@@ -206,11 +206,16 @@ class EvaluationRunner:
         db = self._get_db()
 
         # Create evaluation run record in DB
+        active_model = (
+            settings.GEMINI_MODEL
+            if settings.LLM_PROVIDER == "gemini"
+            else (settings.GROQ_MODEL if settings.LLM_PROVIDER == "groq" else settings.OPENAI_MODEL)
+        )
         eval_run = EvaluationRun(
             evaluation_run_id=f"run-{generate_uuid()[:8]}",
             agent_version=agent_version,
             prompt_version=prompt_version,
-            model_configuration=json.dumps({"provider": settings.LLM_PROVIDER, "model": settings.GROQ_MODEL}),
+            model_configuration=json.dumps({"provider": settings.LLM_PROVIDER, "model": active_model}),
             execution_status="RUNNING",
             total_scenarios=len(scenarios_to_run),
             started_at=datetime.now(timezone.utc),
