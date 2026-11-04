@@ -1,14 +1,15 @@
 # Clinical Voice Agent — Session Memory File
-# Workspace: F:\Voice_Agent (git: main branch)
-# Updated: 2026-11-03
+# Workspace: F:\Voice_Agent (git: main & feature/voice-agent-cloud-and-runtime-fixes)
+# Updated: 2026-11-04 (Lead AI Engineer Session)
 
 ---
 
 ## 1. Role & Engineering Philosophy
 
 - Operating as **Lead AI Engineer** overseeing end-to-end voice agent architecture.
-- Core Tenet: *"Conversational fluency is not task success."* Every appointment booking, cancellation, or rescheduling must be backed by a verified database record and calendar event.
-- Free-Tier First: The entire stack operates reliably on free-tier service configurations (LiveKit Cloud 50 hrs/month, Deepgram $200 trial credit, ElevenLabs 10K free characters with premade voices, Google Gemini Free tier, and Google Calendar Sandbox).
+- Core Tenet: *"Conversational fluency is not task success."* Every appointment booking, cancellation, or rescheduling must be backed by a verified database record and Google Calendar event.
+- Free-Tier First: The entire stack operates reliably on free-tier service configurations (LiveKit Cloud, Deepgram trial credit, ElevenLabs premade voices, Google Gemini Free tier, and Google Calendar Sandbox).
+- Contributor Identity: Local git repository configured with `user.name = "Mahandar Khatri"` and `user.email = "mk6447959@gmail.com"`. All commits are attributed to this identity.
 
 ---
 
@@ -21,58 +22,71 @@
 - `MockCalendarService` sandbox with deterministic busy slot fixtures and reset capability.
 - `AppointmentService` with two-phase commit, collision prevention, idempotency, and cancellation.
 
-### Phase 2: Controlled Agent Tools ✅
-- 8 clinical tool functions: `get_clinic_information`, `get_doctor_information`, `check_availability`, `get_alternative_slots`, `book_appointment`, `get_appointment`, `cancel_appointment`, `reschedule_appointment`.
-- Clean error compensation: old calendar events preserved if new event booking fails during rescheduling.
+### Phase 2: Controlled Agent Tools (Fully Async Coroutines) ✅
+- 6 asynchronous clinical tool functions: `check_doctor_availability`, `book_clinical_appointment`, `lookup_doctor_information`, `lookup_clinic_information`, `cancel_existing_appointment`, `reschedule_existing_appointment`.
+- In `livekit-agents` v1.8, tool execution awaits registered function tools (`output = await tool(...)`). Converted all 6 clinical tools to `async def` coroutines, eliminating `TypeError: object str can't be used in 'await' expression` that previously caused agent freezes after the greeting turn.
+- Error compensation: existing calendar events are preserved if new event booking fails during rescheduling.
 
 ### Phase 3: Conversation State Machine & Guardrails ✅
 - 12 conversation states: `INIT`, `IDENTIFY_INTENT`, `COLLECTING_INFO`, `CHECKING_AVAILABILITY`, `OFFERING_ALTERNATIVES`, `CONFIRMING_DETAILS`, `BOOKING`, `BOOKED`, `CANCELLED`, `RESCHEDULED`, `EMERGENCY_ESCALATED`, `CLOSING`.
 - Safety guardrails: Emergency keyword detection → immediate 911 escalation; medical advice refusal; patient privacy protection.
 - Anti-hallucination verification: `verify_booking_hallucination()` ensures the agent never states an appointment is confirmed without a real DB ID.
 
-### Phase 4: LiveKit Voice Agent Pipeline ✅
+### Phase 4: LiveKit Voice Agent Pipeline & Audio Naturalness ✅
 - LiveKit Agents v1.8 `Agent` + `AgentSession` architecture.
-- Multi-provider support with automatic fallback:
-  - **LLM**: Gemini (`gemini-3.1-flash-lite` via Google OpenAI-compatible endpoint).
+- **Model Standardization**: `gemini-3.5-flash-lite` with ~1.1s TTFT, 0 quota 503 errors, and reliable tool-calling support.
+- **CPU STFT Loop Bypass**: Set `room_output_options=room_io.RoomOutputOptions(sync_transcription=False)`, eliminating the 8-second event loop audio stutter and freezes on Windows.
+- **Natural Conversational Flow & Barge-In**:
+  - `min_endpointing_delay = 0.8s` (natural human conversational breathing pause)
+  - `max_endpointing_delay = 2.5s` (allows patient to formulate complex responses without being rushed)
+  - `min_interruption_duration = 0.6s` (prevents stray noises or mic clicks from interrupting Rachel)
+  - `min_interruption_words = 2` (minimum 2 recognizable words required before interrupting)
+  - `resume_false_interruption = True` (agent resumes speaking if caller coughs or makes a brief noise)
+  - Silero VAD activation threshold tuned to `0.55` and `min_speech_duration = 0.1s`.
+- Multi-provider audio stack:
+  - **LLM**: Gemini (`gemini-3.5-flash-lite` via Google OpenAI-compatible endpoint).
   - **STT**: Deepgram Nova-2 (`nova-2-general`).
   - **TTS**: ElevenLabs (`eleven_turbo_v2_5` with free-tier premade voice `EXAVITQu4vr4xnSDxMaL` / Bella).
-  - **VAD**: Silero VAD for low-latency barge-in and turn detection.
-- `@function_tool` registrations linking agent tools directly to clinical services.
+  - **VAD**: Silero VAD prewarmed in `prewarm(proc)` to avoid event loop stalls.
 
-### Phase 5: Autonomous Evaluation & Simulated Patient ✅
+### Phase 5: Autonomous Evaluation & Benchmark Suite ✅
 - 15 deterministic scenarios (TC-001 through TC-029) spanning booking, missing info, unavailability, cancellations, emergency escalation, and privacy.
 - `SimulatedPatient` persona engine simulating incremental multi-turn patient dialogue.
 - Independent evaluators: DB task verifier, safety auditor, tool accuracy calculator.
 - Isolated in-memory SQLite instances and resettable calendar fixtures per test scenario.
+- **Benchmark Scorecard**: 15 / 15 Passed (100.0% Pass Rate, 100.0% Task Completion, 100.0% Safety Compliance) in 2.97s.
 
 ### Phase 6: FastAPI REST API & LiveKit Token Service ✅
 - `backend/main.py` FastAPI app with lifespan hooks and CORS middleware.
 - `backend/api/routes/v1.py` endpoints:
-  - `GET /health` — health check
+  - `GET /health` — health check (`status: ok`)
   - `GET /api/v1/doctors` — list active doctors
   - `POST /api/v1/appointments/check` — check availability
   - `POST /api/v1/appointments` / `POST /api/v1/appointments/book` — book appointment
   - `DELETE /api/v1/appointments/{id}` — cancel appointment
-  - `POST /api/v1/livekit/token` — creates a unique room, dispatches the named worker (`clinical-voice-agent`), and returns caller JWT token
+  - `POST /api/v1/livekit/token` — creates a unique room (`clinical-*`), dispatches worker (`clinical-voice-agent`), returns JWT token
   - `GET /api/v1/evaluations/scenarios`, `POST /api/v1/evaluations/run`, `GET /api/v1/evaluations/runs` — evaluation management
 
-### Phase 7: React Frontend & Evaluation Dashboard ✅
+### Phase 7: React Frontend & Lumora Design Overhaul ✅
 - Modern React 19 + TypeScript + Vite single-page application under `frontend/`.
-- Voice Receptionist Panel: LiveKit WebRTC client, microphone toggle, pulsating audio visualizer orb, real-time live subtitles/transcripts, call end controls.
-- Evaluation Dashboard: scenario listing, single-click test execution, real-time metrics (task completion %, tool accuracy %, safety compliance %), and conversation inspection.
+- **Lumora Liquid Voice Orb**: Custom HTML5 Canvas particle physics rendering chromatic ripples across 5 real-time states (`idle`, `connecting`, `listening`, `thinking`, `speaking`).
+- **24-Band Audio Spectrum**: Real-time decibel amplitude visualizer showing incoming/outgoing speech activity.
+- **Hardware WebRTC Echo Cancellation**: Enforced `{ echoCancellation: true, noiseSuppression: true, autoGainControl: true }` in `VoicePanel.tsx`, eliminating acoustic feedback where Rachel's voice from computer speakers re-entered the mic.
+- **Scoped Auto-Scrolling Transcript**: Replaced window-level `scrollIntoView()` with container-scoped `.scrollTop = scrollHeight` on `.transcript-stream`, completely stopping viewport jumping.
+- **Live Doctor Schedule Grid (Bento Grid)**: Live physician schedule matrix displaying working hours, booked appointment cards, and real-time Google Calendar synchronization status.
 - Build verified with `npm run build` with zero TypeScript errors.
 
-### Phase 8: Docker & Production Runbook ✅
+### Phase 8: Docker & Documentation ✅
 - Multi-stage `Dockerfile` for Python backend/agent worker.
 - `frontend/Dockerfile` and `frontend/nginx.conf` for optimized static asset serving.
 - `docker-compose.yml` defining PostgreSQL, backend API, LiveKit worker, and frontend services.
-- Detailed production deployment runbook in `README.md`.
+- Detailed production documentation in `README.md` with color-styled Mermaid architecture flows, sequence diagrams, and UI layout wireframes.
 
 ---
 
 ## 3. Test Suite Verification
 
-**Current status**: **43 / 43 automated tests pass** (`pytest -v` in ~36.9s):
+**Current status**: **43 / 43 automated tests pass** (`pytest -v` in ~19.2s):
 - `tests/integration/test_api_routes.py`: 5 passed
 - `tests/unit/test_appointment_service.py`: 9 passed
 - `tests/unit/test_clinical_tools.py`: 4 passed
@@ -82,48 +96,20 @@
 
 ---
 
-## 4. Root Cause Analysis: Server Testing "status : not found"
+## 4. Key Bug Fixes & Architectural Resolutions
 
-When testing the server or inspecting the LiveKit Cloud dashboard, `"status : not found"` appeared due to the following reasons:
+1. **Agent Freezing After First Reply**:
+   - *Cause*: In `livekit-agents` v1.8, `tool_executor.py` awaits registered function tools (`output = await tool(*args)`). The 6 clinical tools were synchronous `def`, throwing `TypeError: object str can't be used in 'await' expression` whenever the LLM tried to check availability or look up doctors.
+   - *Fix*: Converted all 6 tools to `async def` and updated pipeline unit tests to `@pytest.mark.asyncio`.
 
-1. **LiveKit Cloud Worker Not Connected**:
-   - In LiveKit Cloud, an agent status reports "not found" when no worker process is connected to the cloud project WebSocket and registered under `agent_name = "clinical-voice-agent"`.
-   - **Resolution**: The worker must be launched using `python backend/agent/voice_agent.py dev` (or `start`). Once active, it registers with LiveKit Cloud and receives dispatches immediately.
+2. **Mid-Sentence Speaking & Interruption Glitch**:
+   - *Cause*: Browser microphone was opened without WebRTC hardware constraints, causing Rachel's voice from device speakers to echo into the microphone. Silero VAD treated the echo as caller speech and interrupted Rachel mid-sentence.
+   - *Fix*: Added `{ echoCancellation: true, noiseSuppression: true, autoGainControl: true }` in `VoicePanel.tsx`, increased silence endpointing delays to $0.8\text{s} - 2.5\text{s}$, set `min_interruption_duration = 0.6s`, `min_interruption_words = 2`, and enabled `resume_false_interruption = True`.
 
-2. **Gemini Model Name Incompatibility**:
-   - `GEMINI_MODEL=gemini-3.8-flash` in the provided `.env` does not exist on Google's OpenAI-compatible endpoint (`https://generativelanguage.googleapis.com/v1beta/openai/`), returning HTTP 404/503 `status: NOT_FOUND` or `UNAVAILABLE`.
-   - **Resolution**: Added automatic model fallback in `build_llm()` to normalize model names to `gemini-3.1-flash-lite`, which is active, fast, and stable.
+3. **Page Auto-Scrolling Down Forcibly**:
+   - *Cause*: `useEffect` called `transcriptEndRef.current.scrollIntoView({ behavior: 'smooth' })` on every streaming word token, violently scrolling the outer browser window to the bottom.
+   - *Fix*: Replaced with container-scoped scrolling: `transcriptStreamRef.current.scrollTop = transcriptStreamRef.current.scrollHeight`.
 
-3. **ElevenLabs Free Tier Voice Restrictions (HTTP 402)**:
-   - Voice ID `21m00Tcm4TlvDq8ikWAM` ("Rachel") is a library voice that ElevenLabs restricts to paid subscribers (`paid_plan_required: Free users cannot use library voices via the API`).
-   - **Resolution**: Added automatic fallback in `build_tts()` to `EXAVITQu4vr4xnSDxMaL` ("Bella"), a free premade voice supported across all free tiers.
-
-4. **CLI Python Path Resolution**:
-   - Running `python backend/agent/voice_agent.py` directly from PowerShell triggered `ModuleNotFoundError: No module named 'config'` because `sys.path` did not contain the repository root.
-   - **Resolution**: Dynamically added workspace root to `sys.path` at the top of `backend/agent/voice_agent.py`.
-
----
-
-## 5. Execution Runbook
-
-### Service 1: FastAPI Backend
-```powershell
-cd F:\Voice_Agent
-.venv\Scripts\activate
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
-```
-Swagger UI: `http://localhost:8000/docs`
-
-### Service 2: LiveKit Voice Worker
-```powershell
-cd F:\Voice_Agent
-.venv\Scripts\activate
-python backend/agent/voice_agent.py dev
-```
-
-### Service 3: Frontend Web UI
-```powershell
-cd F:\Voice_Agent\frontend
-npm run dev
-```
-Web App: `http://localhost:5173`
+4. **Mermaid Sequence Diagram Parse Error**:
+   - *Cause*: In Mermaid sequence diagrams, semicolons (`;`) act as statement separators. `Client->>Patient: Plays audio via speakers; Orb animates waves` caused a newline parse error on line 19.
+   - *Fix*: Sanitized semicolons, quoted participant aliases, and replaced raw newlines with `<br/>` tags.

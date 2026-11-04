@@ -1,18 +1,18 @@
 # Clinical Voice Agent — Project Context File
-# Workspace: F:\Voice_Agent (git: main branch)
-# Updated: 2026-11-03
+# Workspace: F:\Voice_Agent (git: main & feature/voice-agent-cloud-and-runtime-fixes)
+# Updated: 2026-11-04 (Lead AI Engineer Session)
 
 ## What Is This Project?
 
-A **production-grade Clinical AI Receptionist ("Rachel")** — a real-time voice agent that:
-- Answers patient calls using LiveKit WebRTC audio streaming.
+A **production-grade Clinical AI Receptionist ("Rachel")** — a real-time conversational voice agent that:
+- Answers patient calls using LiveKit WebRTC audio streaming with hardware echo cancellation.
 - Transcribes patient speech with Deepgram Nova-2 (`nova-2-general`).
-- Processes conversation turns with Google Gemini (`gemini-3.1-flash-lite` via OpenAI-compatible endpoint).
+- Processes conversation turns with Google Gemini (`gemini-3.5-flash-lite` via OpenAI-compatible endpoint with ~1.1s TTFT).
 - Speaks back using ElevenLabs TTS (`eleven_turbo_v2_5` with free-tier premade voice `Bella` / `EXAVITQu4vr4xnSDxMaL`).
-- Checks doctor availability against Google Calendar (sandbox / live).
-- Books, reschedules, and cancels appointments deterministically with two-phase commit and audit logging.
+- Checks doctor availability against Google Calendar (sandbox / live) and clinical database records.
+- Books, reschedules, and cancels appointments deterministically with two-phase commit, double-booking prevention, and audit logging.
 - Enforces clinical safety guardrails (emergency 911 escalation, medical advice refusal, HIPAA patient privacy protection, anti-hallucination verification).
-- Provides a modern React + TypeScript + Vite frontend with live WebRTC audio and an Autonomous Evaluation Dashboard.
+- Features a Lumora glassmorphic React 19 + TypeScript frontend with a Canvas Liquid Voice Orb, 24-band audio spectrum, live doctor schedule grid, and an Autonomous Evaluation Dashboard.
 
 ---
 
@@ -21,112 +21,87 @@ A **production-grade Clinical AI Receptionist ("Rachel")** — a real-time voice
 | Area | Status | Evidence |
 |---|---|---|
 | **Phase 1: Foundation & Data Architecture** | ✅ COMPLETE | 8 SQLAlchemy models, repository pattern, Pydantic v2 schemas, SQLite/Postgres DB setup |
-| **Phase 2: Controlled Agent Tools** | ✅ COMPLETE | 8 clinical tools (`get_clinic_information`, `get_doctor_information`, `check_availability`, `book_appointment`, `cancel_appointment`, `reschedule_appointment`, etc.) |
+| **Phase 2: Controlled Agent Tools** | ✅ COMPLETE | 6 async clinical tools (`check_doctor_availability`, `book_clinical_appointment`, `lookup_doctor_information`, `lookup_clinic_information`, `cancel_existing_appointment`, `reschedule_existing_appointment`) |
 | **Phase 3: Conversation State & Guardrails** | ✅ COMPLETE | 12-state conversation manager, emergency 911 escalation, medical advice refusal, privacy filter, anti-hallucination validation |
-| **Phase 4: LiveKit Voice Agent Pipeline** | ✅ COMPLETE | LiveKit Agents v1.8 worker, Gemini LLM fallback, Deepgram STT, ElevenLabs TTS free-tier fallback, Silero VAD |
-| **Phase 5: Autonomous Evaluation Engine** | ✅ COMPLETE | 15 deterministic scenarios (TC-001–TC-029), simulated patient persona, ground-truth DB verifier, safety & tool evaluators |
+| **Phase 4: LiveKit Voice Agent Pipeline** | ✅ COMPLETE | LiveKit Agents v1.8 worker, Gemini 3.5 Flash Lite LLM, Deepgram Nova-2 STT, ElevenLabs TTS, Silero VAD, natural barge-in (0.8s–2.5s endpointing) |
+| **Phase 5: Autonomous Evaluation Engine** | ✅ COMPLETE | 15 deterministic scenarios (TC-001–TC-029), simulated patient persona, ground-truth DB verifier, 100% pass rate in 2.97s |
 | **Phase 6: FastAPI REST API & Token Service** | ✅ COMPLETE | FastAPI with CORS, appointment routes, LiveKit room token generator & named-agent dispatcher |
-| **Phase 7: React Frontend & Evaluation Dashboard** | ✅ COMPLETE | React 19 + TypeScript + Vite, WebRTC voice call panel, audio visualizer orb, live transcript, scenario runner |
-| **Phase 8: Docker & Production Runbook** | ✅ COMPLETE | Multi-stage Dockerfile, docker-compose.yml, nginx configuration, production runbook |
+| **Phase 7: React Frontend & Lumora Overhaul** | ✅ COMPLETE | React 19 + TypeScript + Vite, Liquid Voice Orb Canvas, 24-band spectrum, live doctor schedule grid, hardware AEC, scoped transcript |
+| **Phase 8: Docker & Production Runbook** | ✅ COMPLETE | Multi-stage Dockerfile, docker-compose.yml, nginx configuration, production README with color-styled Mermaid architecture |
 
-**Test Status**: **43 / 43 automated tests passing** across unit and integration suites.
-
----
-
-## Root Cause Analysis: Server Testing "status : not found"
-
-When testing the server or LiveKit Cloud console, `"status : not found"` occurred due to four distinct issues:
-
-1. **LiveKit Cloud Worker Offline**:
-   - LiveKit Cloud Console displays `Agent status: Not found` if no LiveKit agent worker process is actively connected to the project WebSocket (`wss://live-interview-267n30oe.livekit.cloud`) and registered under `agent_name = "clinical-voice-agent"`.
-   - **Fix**: Launch the worker with `.venv\Scripts\python backend/agent/voice_agent.py dev` (or `start`). Once connected, the worker registers with LiveKit Cloud and receives dispatches immediately.
-
-2. **Gemini Model Incompatibility (`gemini-3.8-flash`)**:
-   - The user `.env` specified `GEMINI_MODEL=gemini-3.8-flash`.
-   - On Google's OpenAI-compatible endpoint (`https://generativelanguage.googleapis.com/v1beta/openai/`), `gemini-3.8-flash` is not an active endpoint and returns HTTP 404 (`status: NOT_FOUND`) or HTTP 503 (`UNAVAILABLE`).
-   - **Fix**: Added automatic model normalization in `backend/agent/voice_agent.py` to route to `gemini-3.1-flash-lite`, which is fully active and responds with ultra-low latency.
-
-3. **ElevenLabs Free-Tier Voice Permission (HTTP 402)**:
-   - The voice ID `21m00Tcm4TlvDq8ikWAM` ("Rachel") is a library voice that returns HTTP 402 `paid_plan_required: "Free users cannot use library voices via the API"` on free-tier ElevenLabs accounts.
-   - **Fix**: Added automatic fallback in `backend/agent/voice_agent.py` to `EXAVITQu4vr4xnSDxMaL` ("Bella"), a free premade voice available on all ElevenLabs free-tier accounts.
-
-4. **Worker CLI Python Path**:
-   - Running `python backend/agent/voice_agent.py` failed with `ModuleNotFoundError: No module named 'config'` because `sys.path` did not contain the repository root when invoked directly.
-   - **Fix**: Dynamically injected the repository root directory into `sys.path` in `backend/agent/voice_agent.py`.
+**Test Status**: **43 / 43 automated tests passing** across unit and integration suites (`pytest -v` in ~19.2s).
+**Evaluation Benchmark**: **15 / 15 scenarios passing (100%)** with zero safety failures.
 
 ---
 
-## Complete Method to Run the System
+## Root Cause Analysis & Recent Architectural Fixes
 
-To run the complete system locally with full voice calling and dashboard:
+1. **LiveKit 1.8 Asynchronous Tool Invocation**:
+   - In LiveKit 1.8, `tool_executor.py` awaits functions (`output = await tool(*args)`).
+   - The 6 clinical tools were synchronous `def`, causing Python to throw `TypeError: object str can't be used in 'await' expression` whenever the LLM tried to check availability or look up doctors. This caused Rachel to freeze after the initial greeting turn.
+   - **Fix**: Converted all 6 clinical tools to `async def` in `backend/agent/voice_agent.py` and updated test fixtures to `@pytest.mark.asyncio`.
+
+2. **Mid-Sentence Speaking & Interruption Glitch**:
+   - Browser microphone was opened without WebRTC hardware constraints, causing Rachel's voice from device speakers to echo into the microphone. Silero VAD treated the echo as caller speech and interrupted Rachel mid-sentence.
+   - **Fix**: Added `{ echoCancellation: true, noiseSuppression: true, autoGainControl: true }` in `VoicePanel.tsx`, increased silence endpointing delays to $0.8\text{s} - 2.5\text{s}$, set `min_interruption_duration = 0.6s`, `min_interruption_words = 2`, and enabled `resume_false_interruption = True`.
+
+3. **Page Auto-Scrolling Down Forcibly**:
+   - `useEffect` called `transcriptEndRef.current.scrollIntoView({ behavior: 'smooth' })` on every streaming word token, violently scrolling the outer browser window to the bottom.
+   - **Fix**: Replaced with container-scoped scrolling: `transcriptStreamRef.current.scrollTop = transcriptStreamRef.current.scrollHeight` on `.transcript-stream`.
+
+4. **Event Loop Freeze in CPU STFT**:
+   - LiveKit's `TranscriptSynchronizer` was running CPU-heavy STFT math on the main asyncio event loop, causing 8-second stalls on Windows.
+   - **Fix**: Disabled STFT loop via `room_output_options=room_io.RoomOutputOptions(sync_transcription=False)`.
+
+5. **Gemini Model Standardization**:
+   - Standardized on `gemini-3.5-flash-lite`, which delivers ~1.1s TTFT, 0 quota 503 errors, and reliable tool-calling support.
+
+6. **Contributor Identity & Remote Sync**:
+   - Configured local git repository with `user.name = "Mahandar Khatri"` and `user.email = "mk6447959@gmail.com"`.
+   - Re-authored all commits and pushed cleanly to both `main` and `feature/voice-agent-cloud-and-runtime-fixes` on `https://github.com/mk-2007/Voice_Agent.git`.
+
+---
+
+## Complete Method to Run the System Locally
 
 ### Terminal 1: FastAPI REST API
 ```powershell
-# Navigate to repository root
 cd F:\Voice_Agent
-
-# Activate virtual environment
-.venv\Scripts\activate
-
-# Launch API server
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-API Documentation will be accessible at: `http://localhost:8000/docs`
+API Documentation: `http://localhost:8000/docs`
+Health check: `http://localhost:8000/health` (`status: ok`)
 
 ### Terminal 2: LiveKit Voice Agent Worker
 ```powershell
-# Navigate to repository root
 cd F:\Voice_Agent
-
-# Activate virtual environment
-.venv\Scripts\activate
-
-# Start the agent worker in development mode (hot reloading)
-python backend/agent/voice_agent.py dev
+.\.venv\Scripts\Activate.ps1
+python backend/agent/voice_agent.py start
 ```
 You should see:
 ```text
+Registered agent worker: clinical-voice-agent (AW_*)
 Connecting to LiveKit server: wss://live-interview-267n30oe.livekit.cloud
-Registered agent worker: clinical-voice-agent
 ```
 
 ### Terminal 3: React Web Frontend
 ```powershell
-# Navigate to frontend directory
 cd F:\Voice_Agent\frontend
-
-# Start Vite development server
 npm run dev
 ```
-Open your browser to: `http://localhost:5173`
-
-### Using the Application
-1. Click **"Start a voice call"** on the Serenity Medical Clinic page.
-2. Grant microphone access when prompted.
-3. The frontend requests `/api/v1/livekit/token`, automatically dispatches Rachel ("clinical-voice-agent"), connects WebRTC audio, and Rachel greets you:
-   > *"Hello! Thank you for calling Serenity Medical Clinic. I'm Rachel, your AI receptionist. How can I help you today?"*
-4. Speak naturally to check doctor schedules, book an appointment, or ask questions about clinic hours and doctors.
-5. Switch to the **Evaluation Dashboard** tab to run automated patient simulations and review ground-truth database results.
+Open `http://localhost:5173` in your browser. Allow microphone permissions and click **"Start Voice Call"** to speak with Rachel.
 
 ---
 
-## Active Environment & Configuration Reference
+## Automated Validation & Benchmark Commands
 
-```env
-DATABASE_URL=sqlite:///./clinical_agent.db
+To run all 43 unit and integration tests:
+```powershell
+.\.venv\Scripts\pytest -v
+```
 
-LIVEKIT_URL=wss://live-interview-267n30oe.livekit.cloud
-LIVEKIT_API_KEY=APIk3ZkJyHK4KtP
-LIVEKIT_AGENT_NAME=clinical-voice-agent
-
-LLM_PROVIDER=gemini
-GEMINI_MODEL=gemini-3.1-flash-lite
-
-STT_PROVIDER=deepgram
-TTS_PROVIDER=elevenlabs
-ELEVENLABS_VOICE_ID=EXAVITQu4vr4xnSDxMaL
-ELEVENLABS_MODEL_ID=eleven_turbo_v2_5
-
-GOOGLE_CALENDAR_SANDBOX=true
-CLINIC_TIMEZONE=America/New_York
+To run the complete closed-loop simulated patient evaluation benchmark:
+```powershell
+.\.venv\Scripts\python -c "from evaluation.runner import EvaluationRunner; res = EvaluationRunner().run_suite(); print('Pass rate:', res['overall_pass_rate'], 'Total:', res['total_scenarios'], 'Passed:', res['passed_scenarios'])"
 ```
