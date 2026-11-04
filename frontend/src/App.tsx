@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Dashboard from './Dashboard'
 import VoicePanel from './VoicePanel'
+import DoctorCards from './DoctorCards'
 
 type Page = 'voice' | 'evaluations'
 
@@ -79,7 +80,14 @@ export default function App() {
           </div>
         </div>
 
-        {page === 'voice' ? <VoicePanel /> : <Dashboard />}
+        {page === 'voice' ? (
+          <>
+            <VoicePanel />
+            <DoctorCards />
+          </>
+        ) : (
+          <Dashboard />
+        )}
       </main>
 
       {/* Footer */}
