@@ -76,7 +76,7 @@ export default function App() {
               {page === 'voice'
                 ? 'AUTONOMOUS CLINIC RECEPTIONIST'
                 : page === 'calendar'
-                ? 'REAL-TIME CLINIC SCHEDULE & GOOGLE CALENDAR SYNC'
+                ? 'CLINIC APPOINTMENT DATABASE VIEW'
                 : 'EVALUATION ENGINE & METRICS'}
             </span>
             <h1>
@@ -90,7 +90,7 @@ export default function App() {
               {page === 'voice'
                 ? 'Speak naturally to check doctor schedules, book or reschedule appointments, and get instant answers about clinic services.'
                 : page === 'calendar'
-                ? 'Real-time visual schedule grid displaying booked appointment slots placed by Rachel, verified against SQLite DB and synchronized with Google Calendar.'
+                ? 'View appointments saved in the clinic database. The backend coordinates bookings with its configured calendar; this page is not a direct Google Calendar feed.'
                 : 'Deterministic multi-turn simulated patient evaluations scoring task outcomes, safety guardrails, and tool execution.'}
             </p>
           </div>

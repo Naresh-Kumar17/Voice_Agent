@@ -121,11 +121,11 @@ export default function LiveCalendarView({ onNavigateToVoice }: LiveCalendarView
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
               <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z" />
             </svg>
-            <span>REAL-TIME CLINIC SCHEDULE</span>
+            <span>CLINIC APPOINTMENT DATABASE</span>
           </div>
           <h2>Live Doctor Calendar & Appointment Grid</h2>
           <p className="calendar-subtitle">
-            Direct two-way synchronization between Voice Agent Rachel, SQLite Clinic DB, and Google Calendar.
+            Displays appointments saved by the backend and refreshes every 4 seconds. Calendar availability and event writes are handled by the booking service.
           </p>
         </div>
 
@@ -177,7 +177,7 @@ export default function LiveCalendarView({ onNavigateToVoice }: LiveCalendarView
         <div className="kpi-card">
           <span className="kpi-label">CONFIRMED SCHEDULED</span>
           <span className="kpi-value text-glow-emerald">{stats.confirmed}</span>
-          <span className="kpi-meta">Verified in Google Cal</span>
+          <span className="kpi-meta">Confirmed in clinic database</span>
         </div>
 
         <div className="kpi-card">
@@ -187,14 +187,9 @@ export default function LiveCalendarView({ onNavigateToVoice }: LiveCalendarView
         </div>
 
         <div className="kpi-card">
-          <span className="kpi-label">CALENDAR INTEGRATION</span>
-          <div className="kpi-gcal-badge">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="#34A853">
-              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-            </svg>
-            <span>Google Calendar Synced</span>
-          </div>
-          <span className="kpi-meta">gcal_mock_DOC-00X active</span>
+          <span className="kpi-label">APPOINTMENT SOURCE</span>
+          <span className="kpi-value text-glow-indigo">Clinic database</span>
+          <span className="kpi-meta">Auto-refreshes every 4 seconds</span>
         </div>
       </div>
 
@@ -363,7 +358,7 @@ export default function LiveCalendarView({ onNavigateToVoice }: LiveCalendarView
                             <svg viewBox="0 0 24 24" width="11" height="11" fill="#34A853">
                               <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                             </svg>
-                            <span>Google Cal: {matchingAppt.calendar_event_id.replace('gcal_mock_', '')}</span>
+                            <span>Calendar ref: {matchingAppt.calendar_event_id}</span>
                           </div>
                         )}
                       </div>

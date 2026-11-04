@@ -9,7 +9,9 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
+from datetime import datetime
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 # Ensure workspace root is on sys.path regardless of how script was invoked
 root_dir = Path(__file__).resolve().parent.parent.parent
@@ -231,6 +233,18 @@ async def cancel_existing_appointment(appointment_id: str) -> str:
 
 
 @function_tool
+async def lookup_existing_appointment(appointment_id: str) -> str:
+    """Look up an appointment by its reference ID and return its date, time, doctor, and status."""
+    res = get_appointment(appointment_id)
+    if not res.get("found"):
+        return res.get("message", f"Appointment '{appointment_id}' not found.")
+    return (
+        f"Appointment {res['appointment_id']} is with {res['doctor_name']} "
+        f"on {res['appointment_date']} at {res['start_time']}. Status: {res['status']}."
+    )
+
+
+@function_tool
 async def reschedule_existing_appointment(
     appointment_id: str,
     new_date: str,
@@ -252,6 +266,7 @@ CLINICAL_TOOLS = [
     book_clinical_appointment,
     lookup_doctor_information,
     lookup_clinic_information,
+    lookup_existing_appointment,
     cancel_existing_appointment,
     reschedule_existing_appointment,
 ]
@@ -280,16 +295,22 @@ class ReceptionistAgent(Agent):
         self.session.say(greeting)
 
 
-def create_clinical_agent() -> Agent:
-    """Factory to create a configured LiveKit Agent with tools and prompts."""
-    instructions = RECEPTIONIST_SYSTEM_PROMPT.format(
+def build_receptionist_instructions() -> str:
+    """Build the system prompt with the current date in the clinic's timezone."""
+    return RECEPTIONIST_SYSTEM_PROMPT.format(
         clinic_name=settings.CLINIC_NAME,
         clinic_phone=settings.CLINIC_PHONE,
         clinic_address=settings.CLINIC_ADDRESS,
         clinic_opening_time=settings.CLINIC_OPENING_TIME,
         clinic_closing_time=settings.CLINIC_CLOSING_TIME,
         clinic_timezone=settings.CLINIC_TIMEZONE,
+        clinic_today=datetime.now(ZoneInfo(settings.CLINIC_TIMEZONE)).date().isoformat(),
     )
+
+
+def create_clinical_agent() -> Agent:
+    """Factory to create a configured LiveKit Agent with tools and prompts."""
+    instructions = build_receptionist_instructions()
 
     llm = build_llm()
     stt = build_stt()
@@ -329,14 +350,7 @@ async def entrypoint(ctx: JobContext):
     logger.info(f"Connecting to room: {ctx.room.name}")
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
-    instructions = RECEPTIONIST_SYSTEM_PROMPT.format(
-        clinic_name=settings.CLINIC_NAME,
-        clinic_phone=settings.CLINIC_PHONE,
-        clinic_address=settings.CLINIC_ADDRESS,
-        clinic_opening_time=settings.CLINIC_OPENING_TIME,
-        clinic_closing_time=settings.CLINIC_CLOSING_TIME,
-        clinic_timezone=settings.CLINIC_TIMEZONE,
-    )
+    instructions = build_receptionist_instructions()
     llm = build_llm()
     stt = build_stt()
     tts = build_tts()
@@ -414,4 +428,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

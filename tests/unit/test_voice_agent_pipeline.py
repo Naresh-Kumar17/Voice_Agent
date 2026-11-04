@@ -11,6 +11,7 @@ from backend.agent.voice_agent import (
     CLINICAL_TOOLS,
     check_doctor_availability,
     book_clinical_appointment,
+    lookup_existing_appointment,
     lookup_doctor_information,
     lookup_clinic_information,
 )
@@ -19,7 +20,38 @@ from backend.agent.voice_agent import (
 def test_agent_instantiation():
     agent = create_clinical_agent()
     assert agent is not None
-    assert len(CLINICAL_TOOLS) == 6
+    assert len(CLINICAL_TOOLS) == 7
+
+
+def test_agent_instructions_include_clinic_local_date(monkeypatch):
+    class FixedDateTime:
+        @classmethod
+        def now(cls, tz):
+            from datetime import datetime
+            return datetime(2026, 11, 4, 9, 0, tzinfo=tz)
+
+    monkeypatch.setattr(voice_agent, "datetime", FixedDateTime)
+    instructions = voice_agent.build_receptionist_instructions()
+    assert "Today's date is 2026-11-04 in the clinic timezone (America/New_York)." in instructions
+
+
+@pytest.mark.asyncio
+async def test_lookup_existing_appointment_returns_verified_date(monkeypatch):
+    monkeypatch.setattr(
+        voice_agent,
+        "get_appointment",
+        lambda appointment_id: {
+            "found": True,
+            "appointment_id": appointment_id,
+            "doctor_name": "Dr. Ahmed Khan",
+            "appointment_date": "2026-11-11",
+            "start_time": "10:00",
+            "status": "CONFIRMED",
+        },
+    )
+    result = await lookup_existing_appointment(appointment_id="APT-12345678")
+    assert "on 2026-11-11 at 10:00" in result
+    assert "Status: CONFIRMED" in result
 
 
 @pytest.mark.asyncio
@@ -124,5 +156,4 @@ def test_deepgram_stt_fallback_without_key(monkeypatch):
 
     assert voice_agent.build_stt() is expected
     assert "api_key" in captured
-
 

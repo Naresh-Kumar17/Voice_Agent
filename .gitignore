@@ -29,6 +29,7 @@ traces/
 logs/
 
 # Node / Frontend
+/package-lock.json
 frontend/node_modules/
 frontend/build/
 frontend/dist/
@@ -45,4 +46,3 @@ yarn-error.log*
 .idea/
 .DS_Store
 Thumbs.db
-
