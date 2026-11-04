@@ -119,6 +119,21 @@ export default function VoicePanel({ onOpenCalendar }: VoicePanelProps) {
     setCallEndedAlert(false)
     let room: Room | null = null
     try {
+      // 1. Ensure user has granted microphone permission first before connecting
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+        try {
+          const testStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          testStream.getTracks().forEach(t => t.stop())
+        } catch (micErr: any) {
+          throw new Error(
+            micErr?.name === 'NotAllowedError'
+              ? 'Microphone access was denied. Please allow microphone permissions in your browser URL bar to talk with Rachel.'
+              : 'Could not access audio input device. Please check your microphone connection.'
+          )
+        }
+      }
+
+      // 2. Obtain token and trigger LiveKit agent worker dispatch
       const creds = await api<LiveKitCredentials>('/api/v1/livekit/token', { method: 'POST', body: '{}' })
       room = new Room({ adaptiveStream: true, dynacast: true })
       roomRef.current = room
@@ -145,9 +160,10 @@ export default function VoicePanel({ onOpenCalendar }: VoicePanelProps) {
         setLines(current => {
           const next = [...current]
           for (const segment of segments) {
+            const isUser = participant?.isLocal ?? false
             const item: TranscriptLine = {
               id: segment.id,
-              speaker: participant?.identity === room?.localParticipant.identity ? 'You' : 'Rachel',
+              speaker: isUser ? 'You' : 'Rachel',
               text: segment.text,
               final: segment.final,
               timestamp: now,
@@ -161,43 +177,38 @@ export default function VoicePanel({ onOpenCalendar }: VoicePanelProps) {
       })
 
       room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
-        if (track.kind === Track.Kind.Audio && participant.identity !== room?.localParticipant.identity) {
+        if (track.kind === Track.Kind.Audio && !participant.isLocal) {
           const audio = track.attach()
           audio.autoplay = true
           audio.setAttribute('playsinline', 'true')
           document.body.appendChild(audio)
           audioElements.current.push(audio)
-          void audio.play().catch(err => console.warn('Browser autoplay policy notice:', err))
+          void audio.play().catch(err => console.warn('Browser audio policy notice:', err))
         }
       })
 
+      // 3. Connect WebRTC peer connection
       await room.connect(creds.server_url, creds.participant_token)
       await room.startAudio().catch(() => undefined)
 
-      // Attach any remote audio tracks already published
+      // Attach any remote tracks already published
       for (const p of room.remoteParticipants.values()) {
-        for (const pub of p.audioTrackPublications.values()) {
-          if (pub.track && pub.track.kind === Track.Kind.Audio) {
-            const audio = pub.track.attach()
-            audio.autoplay = true
-            audio.setAttribute('playsinline', 'true')
-            document.body.appendChild(audio)
-            audioElements.current.push(audio)
-            void audio.play().catch(() => undefined)
+        if (!p.isLocal) {
+          for (const pub of p.audioTrackPublications.values()) {
+            if (pub.track && pub.track.kind === Track.Kind.Audio) {
+              const audio = pub.track.attach()
+              audio.autoplay = true
+              audio.setAttribute('playsinline', 'true')
+              document.body.appendChild(audio)
+              audioElements.current.push(audio)
+              void audio.play().catch(() => undefined)
+            }
           }
         }
       }
 
-      try {
-        await room.localParticipant.setMicrophoneEnabled(true)
-      } catch (micErr: any) {
-        console.warn('Microphone permission or hardware error:', micErr)
-        throw new Error(
-          micErr?.name === 'NotAllowedError'
-            ? 'Microphone access was denied. Please allow microphone permissions in your browser address bar to speak with Rachel.'
-            : 'Could not access your microphone. Please verify an audio input device is connected.'
-        )
-      }
+      // 4. Publish microphone audio track to the agent
+      await room.localParticipant.setMicrophoneEnabled(true)
       setConnected(true)
     } catch (cause) {
       await room?.disconnect().catch(() => undefined)

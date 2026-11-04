@@ -27,6 +27,7 @@ from livekit.agents import (
     AgentSession,
     AutoSubscribe,
     JobContext,
+    JobProcess,
     WorkerOptions,
     cli,
     function_tool,
@@ -251,8 +252,27 @@ CLINICAL_TOOLS = [
 
 
 # =====================================================================
-# Clinical Agent Factory
+# Clinical Agent Class & Factory
 # =====================================================================
+
+class ReceptionistAgent(Agent):
+    """
+    LiveKit Agent for Serenity Medical Clinic receptionist.
+    Handles clinical triage, FAQ answering, doctor scheduling, and natural barge-in.
+    """
+
+    async def on_enter(self) -> None:
+        """
+        Executed automatically when the agent session enters the active activity.
+        Speaks the friendly opening clinic greeting to the caller.
+        """
+        greeting = (
+            f"Hello! Thank you for calling {settings.CLINIC_NAME}. "
+            "I'm Rachel, your AI receptionist. How can I help you today?"
+        )
+        logger.info(f"Rachel speaking opening greeting to caller: {greeting}")
+        self.session.say(greeting)
+
 
 def create_clinical_agent() -> Agent:
     """Factory to create a configured LiveKit Agent with tools and prompts."""
@@ -270,7 +290,7 @@ def create_clinical_agent() -> Agent:
     tts = build_tts()
     vad = build_vad()
 
-    return Agent(
+    return ReceptionistAgent(
         instructions=instructions,
         tools=CLINICAL_TOOLS,
         llm=llm,
@@ -282,17 +302,22 @@ def create_clinical_agent() -> Agent:
 
 
 # =====================================================================
-# LiveKit Worker Entrypoint
+# LiveKit Worker Lifecycle
 # =====================================================================
+
+def prewarm(proc: JobProcess):
+    """Preloads Silero VAD ONNX model to avoid event loop stalls when a call connects."""
+    try:
+        proc.userdata["vad"] = silero.VAD.load()
+        logger.info("Silero VAD successfully prewarmed")
+    except Exception as e:
+        logger.warning(f"Silero VAD prewarm skipped: {e}")
+
 
 async def entrypoint(ctx: JobContext):
     """LiveKit agent worker lifecycle entry point."""
     logger.info(f"Connecting to room: {ctx.room.name}")
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
-
-    # Wait for the human participant to enter the room
-    participant = await ctx.wait_for_participant()
-    logger.info(f"Starting voice session with participant: {participant.identity}")
 
     instructions = RECEPTIONIST_SYSTEM_PROMPT.format(
         clinic_name=settings.CLINIC_NAME,
@@ -305,9 +330,14 @@ async def entrypoint(ctx: JobContext):
     llm = build_llm()
     stt = build_stt()
     tts = build_tts()
-    vad = build_vad()
 
-    agent = Agent(
+    vad = None
+    if hasattr(ctx, "proc") and hasattr(ctx.proc, "userdata"):
+        vad = ctx.proc.userdata.get("vad")
+    if vad is None:
+        vad = build_vad()
+
+    agent = ReceptionistAgent(
         instructions=instructions,
         tools=CLINICAL_TOOLS,
         llm=llm,
@@ -324,28 +354,25 @@ async def entrypoint(ctx: JobContext):
         tools=CLINICAL_TOOLS,
         allow_interruptions=True,
     )
+
+    # Start the agent session in the room immediately
     await session.start(agent, room=ctx.room)
+    logger.info(f"Agent session successfully started in room: {ctx.room.name}")
 
-    # Greet patient immediately
-    greeting = (
-        f"Hello! Thank you for calling {settings.CLINIC_NAME}. "
-        "I'm Rachel, your AI receptionist. How can I help you today?"
-    )
-    try:
-        session.say(greeting)
-        logger.info("Spoken greeting sent to session queue")
-    except Exception as e:
-        logger.error(f"Failed to queue greeting: {e}", exc_info=True)
-
-    # Keep the worker task running for the entire duration of the call
+    # Keep worker alive for call duration and cleanly exit when call ends
     disconnect_future = asyncio.get_running_loop().create_future()
-    ctx.room.on(
-        "disconnected",
-        lambda *_: disconnect_future.set_result(None) if not disconnect_future.done() else None,
-    )
+
+    def _mark_done(*_):
+        if not disconnect_future.done():
+            disconnect_future.set_result(None)
+
+    ctx.room.on("disconnected", _mark_done)
+    ctx.room.on("participant_disconnected", _mark_done)
+    session.on("close", _mark_done)
+
     try:
         await disconnect_future
-        logger.info(f"Room {ctx.room.name} disconnected, closing session.")
+        logger.info(f"Room {ctx.room.name} call ended, closing agent session.")
     finally:
         await session.aclose()
 
@@ -355,7 +382,9 @@ def main():
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
+            prewarm_fnc=prewarm,
             agent_name=settings.LIVEKIT_AGENT_NAME,
+            load_threshold=10.0,
         )
     )
 
