@@ -32,6 +32,7 @@ from livekit.agents import (
     cli,
     function_tool,
 )
+from livekit.agents.voice import room_io
 from livekit.plugins import openai, silero
 
 try:
@@ -80,8 +81,9 @@ def build_llm():
         if not settings.GEMINI_API_KEY:
             raise RuntimeError("LLM_PROVIDER is gemini but GEMINI_API_KEY is not configured")
         model = settings.GEMINI_MODEL
-        if model in ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.0-flash"]:
-            model = "gemini-3.1-flash-lite"
+        # Normalize to ultra-reliable, high-availability Gemini models with verified low TTFT
+        if model in ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]:
+            model = "gemini-3.5-flash-lite"
         logger.info(f"Using Gemini LLM: {model}")
         return openai.LLM(
             model=model,
@@ -355,9 +357,15 @@ async def entrypoint(ctx: JobContext):
         allow_interruptions=True,
     )
 
-    # Start the agent session in the room immediately
-    await session.start(agent, room=ctx.room)
-    logger.info(f"Agent session successfully started in room: {ctx.room.name}")
+    # Start the agent session in the room immediately.
+    # sync_transcription=False bypasses TranscriptSynchronizer's CPU STFT loop,
+    # completely eliminating audio stutter and event loop freezes on Windows.
+    await session.start(
+        agent,
+        room=ctx.room,
+        room_output_options=room_io.RoomOutputOptions(sync_transcription=False),
+    )
+    logger.info(f"Agent session successfully started in room: {ctx.room.name} (STFT bypassed)")
 
     # Keep worker alive for call duration and cleanly exit when call ends
     disconnect_future = asyncio.get_running_loop().create_future()

@@ -79,8 +79,8 @@ def test_gemini_model_fallback_normalization(monkeypatch):
     )
 
     assert build_llm() is expected
-    # gemini-3.8-flash should automatically normalize to gemini-3.1-flash-lite
-    assert captured["model"] == "gemini-3.1-flash-lite"
+    # gemini-3.8-flash should automatically normalize to gemini-3.5-flash-lite
+    assert captured["model"] == "gemini-3.5-flash-lite"
 
 
 def test_elevenlabs_voice_fallback(monkeypatch):
