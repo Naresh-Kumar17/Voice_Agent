@@ -290,12 +290,40 @@ async def entrypoint(ctx: JobContext):
     logger.info(f"Connecting to room: {ctx.room.name}")
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
-    # Wait for the first human participant
+    # Wait for the human participant to enter the room
     participant = await ctx.wait_for_participant()
     logger.info(f"Starting voice session with participant: {participant.identity}")
 
-    agent = create_clinical_agent()
-    session = AgentSession()
+    instructions = RECEPTIONIST_SYSTEM_PROMPT.format(
+        clinic_name=settings.CLINIC_NAME,
+        clinic_phone=settings.CLINIC_PHONE,
+        clinic_address=settings.CLINIC_ADDRESS,
+        clinic_opening_time=settings.CLINIC_OPENING_TIME,
+        clinic_closing_time=settings.CLINIC_CLOSING_TIME,
+        clinic_timezone=settings.CLINIC_TIMEZONE,
+    )
+    llm = build_llm()
+    stt = build_stt()
+    tts = build_tts()
+    vad = build_vad()
+
+    agent = Agent(
+        instructions=instructions,
+        tools=CLINICAL_TOOLS,
+        llm=llm,
+        stt=stt,
+        tts=tts,
+        vad=vad,
+        allow_interruptions=True,
+    )
+    session = AgentSession(
+        stt=stt,
+        llm=llm,
+        tts=tts,
+        vad=vad,
+        tools=CLINICAL_TOOLS,
+        allow_interruptions=True,
+    )
     await session.start(agent, room=ctx.room)
 
     # Greet patient immediately
@@ -303,7 +331,23 @@ async def entrypoint(ctx: JobContext):
         f"Hello! Thank you for calling {settings.CLINIC_NAME}. "
         "I'm Rachel, your AI receptionist. How can I help you today?"
     )
-    await session.say(greeting)
+    try:
+        session.say(greeting)
+        logger.info("Spoken greeting sent to session queue")
+    except Exception as e:
+        logger.error(f"Failed to queue greeting: {e}", exc_info=True)
+
+    # Keep the worker task running for the entire duration of the call
+    disconnect_future = asyncio.get_running_loop().create_future()
+    ctx.room.on(
+        "disconnected",
+        lambda *_: disconnect_future.set_result(None) if not disconnect_future.done() else None,
+    )
+    try:
+        await disconnect_future
+        logger.info(f"Room {ctx.room.name} disconnected, closing session.")
+    finally:
+        await session.aclose()
 
 
 def main():

@@ -207,9 +207,8 @@ async def create_livekit_token():
             room_join=True,
             room=room_name,
             can_publish=True,
-            can_publish_sources=["microphone"],
-            can_publish_data=False,
             can_subscribe=True,
+            can_publish_data=True,
         ))
         .to_jwt()
     )

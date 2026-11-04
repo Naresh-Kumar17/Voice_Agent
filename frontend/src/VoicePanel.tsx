@@ -167,11 +167,37 @@ export default function VoicePanel({ onOpenCalendar }: VoicePanelProps) {
           audio.setAttribute('playsinline', 'true')
           document.body.appendChild(audio)
           audioElements.current.push(audio)
+          void audio.play().catch(err => console.warn('Browser autoplay policy notice:', err))
         }
       })
 
       await room.connect(creds.server_url, creds.participant_token)
-      await room.localParticipant.setMicrophoneEnabled(true)
+      await room.startAudio().catch(() => undefined)
+
+      // Attach any remote audio tracks already published
+      for (const p of room.remoteParticipants.values()) {
+        for (const pub of p.audioTrackPublications.values()) {
+          if (pub.track && pub.track.kind === Track.Kind.Audio) {
+            const audio = pub.track.attach()
+            audio.autoplay = true
+            audio.setAttribute('playsinline', 'true')
+            document.body.appendChild(audio)
+            audioElements.current.push(audio)
+            void audio.play().catch(() => undefined)
+          }
+        }
+      }
+
+      try {
+        await room.localParticipant.setMicrophoneEnabled(true)
+      } catch (micErr: any) {
+        console.warn('Microphone permission or hardware error:', micErr)
+        throw new Error(
+          micErr?.name === 'NotAllowedError'
+            ? 'Microphone access was denied. Please allow microphone permissions in your browser address bar to speak with Rachel.'
+            : 'Could not access your microphone. Please verify an audio input device is connected.'
+        )
+      }
       setConnected(true)
     } catch (cause) {
       await room?.disconnect().catch(() => undefined)
