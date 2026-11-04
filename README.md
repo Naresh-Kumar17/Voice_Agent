@@ -80,8 +80,8 @@ flowchart TD
     subgraph Gateway["🚪 API GATEWAY (FastAPI / Uvicorn)"]
         AuthRoute["LiveKit Token Service (Signed JWT)"]:::gatewayStyle
         DispatchRoute["Agent Worker Dispatch Orchestrator"]:::gatewayStyle
-        ApptAPI["Appointment & Doctor REST APIs"]:::gatewayStyle
-        EvalAPI["Automated Benchmark & Triage API"]:::gatewayStyle
+        ApptAPI["Appointment and Doctor REST APIs"]:::gatewayStyle
+        EvalAPI["Automated Benchmark and Triage API"]:::gatewayStyle
     end
 
     subgraph RTC["☁️ LIVEKIT REAL-TIME AUDIO MESH"]
@@ -144,7 +144,7 @@ flowchart TD
     Safety -->|Validated Transactions| SQLite
     Safety -->|Calendar Insert/Delete| GCal
     Safety -->|Audit Records| AuditLog
-    CalUI <-->|Live Schedule Poll / Sync| ApptAPI
+    CalUI -->|Live Schedule Poll and Sync| ApptAPI
 ```
 
 ---
@@ -161,26 +161,26 @@ flowchart LR
     classDef client fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
 
     subgraph LLMLayer["1. Text Generation"]
-        Gemini["Gemini 3.5 Flash Lite\nStreaming Text Tokens"]:::llm
+        Gemini["Gemini 3.5 Flash Lite<br/>Streaming Text Tokens"]:::llm
     end
 
     subgraph ElevenLabsLayer["2. Voice Synthesis"]
-        ELPlugin["ElevenLabs Plugin (eleven_turbo_v2_5)\nVoice: Rachel (EXAVITQu4vr4xnSDxMaL)\nGenerates Empathetic Spoken Audio"]:::el
+        ELPlugin["ElevenLabs Plugin (eleven_turbo_v2_5)<br/>Voice: Rachel (EXAVITQu4vr4xnSDxMaL)<br/>Generates Empathetic Spoken Audio"]:::el
     end
 
-    subgraph LiveKitLayer["3. Transport & Telephony"]
-        LKSession["LiveKit AgentSession\nEncodes Audio to WebRTC Opus Track\nMonitors Silero VAD Barge-In"]:::lk
+    subgraph LiveKitLayer["3. Transport and Telephony"]
+        LKSession["LiveKit AgentSession<br/>Encodes Audio to WebRTC Opus Track<br/>Monitors Silero VAD Barge-In"]:::lk
     end
 
     subgraph ClientLayer["4. User Audio"]
-        Speaker["Browser Audio Track\nPlays Audio to Caller"]:::client
+        Speaker["Browser Audio Track<br/>Plays Audio to Caller"]:::client
     end
 
     Gemini -->|Streamed Words| ELPlugin
     ELPlugin -->|PCM Audio Bytes| LKSession
     LKSession -->|WebRTC Opus Packets| Speaker
 
-    Speaker -.->|User Speaks / Interrupts| LKSession
+    Speaker -.->|User Speaks or Interrupts| LKSession
     LKSession -.->|Abort Signal (Barge-In)| ELPlugin
 ```
 
@@ -252,40 +252,40 @@ The user interface is structured into six modular, responsive glassmorphic compo
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Patient as Caller (Patient)
-    participant Client as React Client (Liquid Voice Orb)
-    participant API as FastAPI Gateway
-    participant LK as LiveKit RTC Cloud
-    participant Worker as Voice Agent Worker (Rachel)
-    participant Tools as Clinical Tools
-    participant DB as SQLite & Google Calendar
+    actor Patient as "Caller (Patient)"
+    participant Client as "React Client (Liquid Voice Orb)"
+    participant API as "FastAPI Gateway"
+    participant LK as "LiveKit RTC Cloud"
+    participant Worker as "Voice Agent Worker (Rachel)"
+    participant Tools as "Clinical Tools"
+    participant DB as "SQLite and Google Calendar"
 
     Note over Patient,Client: 1. Connection Handshake
-    Patient->>Client: Clicks "Start Voice Call"
+    Patient->>Client: Clicks Start Voice Call
     Client->>API: POST /api/v1/livekit/token
-    API->>LK: Dispatch Request for "clinical-voice-agent"
-    API-->>Client: Returns JWT Token & Room Details
-    Client->>LK: Connects WebRTC Track (Echo Cancellation ON)
+    API->>LK: Dispatch Request for clinical-voice-agent
+    API-->>Client: Returns JWT Token and Room Details
+    Client->>LK: Connects WebRTC Track with Echo Cancellation
     Worker->>LK: Worker accepts job and joins room
-    Worker->>Client: Rachel speaks opening greeting: "Hello! Thank you for calling Serenity Medical Clinic..."
-    Client->>Patient: Plays audio via speakers; Orb animates speaking waves
+    Worker->>Client: Rachel speaks opening greeting to caller
+    Client->>Patient: Plays audio via speakers and Orb animates waves
 
-    Note over Patient,Worker: 2. Voice Query & Tool Execution
-    Patient->>Client: "I'd like to book Dr. Ahmed Khan tomorrow at 10 AM."
+    Note over Patient,Worker: 2. Voice Query and Tool Execution
+    Patient->>Client: Caller requests Dr. Ahmed Khan tomorrow at 10 AM
     Client->>LK: Streams microphone audio
-    LK->>Worker: Silero VAD detects voice; Deepgram produces text tokens
-    Worker->>Tools: check_doctor_availability(DOC-001, 2026-11-05, 10:00)
-    Tools->>DB: Check doctor schedule & conflicting calendar events
+    LK->>Worker: Silero VAD detects voice and Deepgram produces text tokens
+    Worker->>Tools: check_doctor_availability(DOC-001, date, 10:00)
+    Tools->>DB: Check doctor schedule and conflicting calendar events
     DB-->>Tools: Slot 10:00 is open
     Tools-->>Worker: Availability confirmation message
-    Worker->>LK: "Dr. Ahmed Khan is available tomorrow at 10:00 AM. May I have your name and phone number?"
+    Worker->>LK: Rachel confirms slot and requests name and phone number
 
-    Note over Patient,DB: 3. Confirmation & Calendar Sync
-    Patient->>Client: "My name is Alice Smith, phone is 555-123-4567."
+    Note over Patient,DB: 3. Confirmation and Calendar Sync
+    Patient->>Client: Caller provides Alice Smith and phone 555-123-4567
     Worker->>Tools: book_clinical_appointment(Alice Smith, 555-123-4567, DOC-001, 10:00)
-    Tools->>DB: Persist to 'appointments' & 'patients' tables + insert Google Calendar event
+    Tools->>DB: Persist to appointments table and insert Google Calendar event
     DB-->>Tools: Returns Appointment ID: APT-2C10BD92
-    Worker->>LK: "Your appointment is confirmed with Dr. Ahmed Khan for tomorrow at 10:00 AM. Confirmation ID: APT-2C10BD92."
+    Worker->>LK: Rachel confirms appointment with confirmation ID APT-2C10BD92
     Client->>Client: Live Doctor Schedule Grid updates instantly
 ```
 
@@ -303,16 +303,16 @@ flowchart TD
     classDef blueGate fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
     classDef greenPass fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#f8fafc;
 
-    Input["Patient Utterance"]:::inputStyle --> Gate1{"1. Acute Emergency?\n(Chest pain, stroke, severe bleeding, suicide)"}
+    Input["Patient Utterance"]:::inputStyle --> Gate1{"1. Acute Emergency?<br/>Chest pain, stroke, severe bleeding, or suicide"}
 
-    Gate1 -- YES --> Action1["🚨 IMMEDIATE 911 REFERRAL\n'Please hang up immediately and call 911 or proceed to the nearest emergency room.'\n(State: EMERGENCY_ESCALATED)"]:::redGate
-    Gate1 -- NO --> Gate2{"2. Medical Advice / Prescription?\n(What medicine should I take? What disease do I have?)"}
+    Gate1 -- YES --> Action1["IMMEDIATE 911 REFERRAL<br/>Please hang up immediately and call 911 or proceed to the nearest emergency room.<br/>State: EMERGENCY_ESCALATED"]:::redGate
+    Gate1 -- NO --> Gate2{"2. Medical Advice or Prescription?<br/>What medicine should I take? What disease do I have?"}
 
-    Gate2 -- YES --> Action2["⚠️ CLINICAL DIAGNOSIS REFUSAL\n'I am an administrative receptionist and cannot provide medical advice or diagnose conditions. Our physicians would be happy to evaluate you in person.'"]:::yellowGate
-    Gate2 -- NO --> Gate3{"3. HIPAA Privacy Violation?\n(Is my neighbor Jane Doe visiting today? What are her symptoms?)"}
+    Gate2 -- YES --> Action2["CLINICAL DIAGNOSIS REFUSAL<br/>I am an administrative receptionist and cannot provide medical advice or diagnose conditions. Our physicians would be happy to evaluate you in person."]:::yellowGate
+    Gate2 -- NO --> Gate3{"3. HIPAA Privacy Violation?<br/>Is my neighbor Jane Doe visiting today? What are her symptoms?"}
 
-    Gate3 -- YES --> Action3["🔒 PRIVACY REFUSAL\n'To protect patient confidentiality and comply with healthcare privacy regulations, I cannot share information regarding other patients.'"]:::blueGate
-    Gate3 -- NO --> Action4["✅ Pass to Administrative Scheduling Intent\n(Proceed with Doctor Availability & Booking Tools)"]:::greenPass
+    Gate3 -- YES --> Action3["PRIVACY REFUSAL<br/>To protect patient confidentiality and comply with healthcare privacy regulations, I cannot share information regarding other patients."]:::blueGate
+    Gate3 -- NO --> Action4["Pass to Administrative Scheduling Intent<br/>Proceed with Doctor Availability and Booking Tools"]:::greenPass
 ```
 
 ---
