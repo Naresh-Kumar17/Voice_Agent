@@ -11,6 +11,7 @@ export default function VoicePanel() {
   const roomRef = useRef<Room | null>(null)
   const audioElements = useRef<HTMLAudioElement[]>([])
   const timerIntervalRef = useRef<number | null>(null)
+  const transcriptEndRef = useRef<HTMLDivElement | null>(null)
 
   const [connecting, setConnecting] = useState(false)
   const [connected, setConnected] = useState(false)
@@ -18,8 +19,28 @@ export default function VoicePanel() {
   const [agentSpeaking, setAgentSpeaking] = useState(false)
   const [micMuted, setMicMuted] = useState(false)
   const [callDuration, setCallDuration] = useState(0)
+  const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
   const [lines, setLines] = useState<TranscriptLine[]>([])
+
+  // Auto-scroll transcript to bottom
+  useEffect(() => {
+    if (transcriptEndRef.current) {
+      transcriptEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [lines])
+
+  const copyTranscript = async () => {
+    if (lines.length === 0) return
+    const text = lines.map(l => `[${l.timestamp}] ${l.speaker}: ${l.text}`).join('\n')
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const clearTranscript = () => {
+    setLines([])
+  }
 
   // Calculate current Orb State
   const orbState: OrbState = connecting
@@ -266,11 +287,34 @@ export default function VoicePanel() {
       {/* Live Conversation Transcript */}
       <div className="transcript-section">
         <div className="transcript-header">
-          <span className="transcript-title">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>
-            Live Conversation Transcript
-          </span>
-          <span className="transcript-count">{lines.length} turns</span>
+          <div className="transcript-title-group">
+            <span className="transcript-title">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>
+              Live Conversation Transcript
+            </span>
+            <span className="transcript-count">{lines.length} turns</span>
+          </div>
+
+          <div className="transcript-actions">
+            {lines.length > 0 && (
+              <>
+                <button
+                  className="transcript-action-btn"
+                  onClick={() => void copyTranscript()}
+                  title="Copy full transcript"
+                >
+                  {copied ? '✓ Copied' : '📋 Copy'}
+                </button>
+                <button
+                  className="transcript-action-btn"
+                  onClick={clearTranscript}
+                  title="Clear transcript"
+                >
+                  ✕ Clear
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="transcript-stream" aria-live="polite" aria-label="Conversation stream">
@@ -281,19 +325,23 @@ export default function VoicePanel() {
               <small>Click "Start Voice Call" above to begin.</small>
             </div>
           ) : (
-            lines.map(line => (
-              <div
-                className={`transcript-bubble ${line.speaker === 'You' ? 'is-user' : 'is-agent'}`}
-                key={line.id}
-              >
-                <div className="bubble-header">
-                  <div className="speaker-avatar">{line.speaker === 'You' ? '👤' : '👩‍⚕️'}</div>
-                  <strong className="speaker-name">{line.speaker === 'You' ? 'You' : 'Rachel (Receptionist)'}</strong>
-                  <span className="bubble-time">{line.timestamp}</span>
+            <>
+              {lines.map(line => (
+                <div
+                  className={`transcript-bubble ${line.speaker === 'You' ? 'is-user' : 'is-agent'}`}
+                  key={line.id}
+                >
+                  <div className="bubble-header">
+                    <div className="speaker-avatar">{line.speaker === 'You' ? '👤' : '👩‍⚕️'}</div>
+                    <strong className="speaker-name">{line.speaker === 'You' ? 'You' : 'Rachel (Receptionist)'}</strong>
+                    {!line.final && <span className="bubble-streaming-badge">streaming…</span>}
+                    <span className="bubble-time">{line.timestamp}</span>
+                  </div>
+                  <p className="bubble-text">{line.text}</p>
                 </div>
-                <p className="bubble-text">{line.text}</p>
-              </div>
-            ))
+              ))}
+              <div ref={transcriptEndRef} />
+            </>
           )}
         </div>
       </div>
