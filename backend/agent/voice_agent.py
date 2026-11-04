@@ -139,7 +139,11 @@ def build_tts():
 def build_vad():
     """Loads Silero Voice Activity Detector for barge-in and turn detection."""
     try:
-        return silero.VAD.load()
+        return silero.VAD.load(
+            min_speech_duration=0.1,
+            min_silence_duration=0.6,
+            activation_threshold=0.55,
+        )
     except Exception as e:
         logger.warning(f"Failed to load Silero VAD: {e}")
         return None
@@ -150,7 +154,7 @@ def build_vad():
 # =====================================================================
 
 @function_tool
-def check_doctor_availability(
+async def check_doctor_availability(
     doctor_id: str,
     appointment_date: str,
     preferred_time: Optional[str] = None,
@@ -168,7 +172,7 @@ def check_doctor_availability(
 
 
 @function_tool
-def book_clinical_appointment(
+async def book_clinical_appointment(
     patient_name: str,
     contact_number: str,
     doctor_id: str,
@@ -192,7 +196,7 @@ def book_clinical_appointment(
 
 
 @function_tool
-def lookup_doctor_information(query: Optional[str] = None) -> str:
+async def lookup_doctor_information(query: Optional[str] = None) -> str:
     """
     Retrieve doctors at the clinic and their medical specialties.
     Query can be a doctor's name or medical field (e.g. 'Dermatologist').
@@ -206,7 +210,7 @@ def lookup_doctor_information(query: Optional[str] = None) -> str:
 
 
 @function_tool
-def lookup_clinic_information() -> str:
+async def lookup_clinic_information() -> str:
     """
     Get general clinic administrative information including hours, address, and phone number.
     """
@@ -218,7 +222,7 @@ def lookup_clinic_information() -> str:
 
 
 @function_tool
-def cancel_existing_appointment(appointment_id: str) -> str:
+async def cancel_existing_appointment(appointment_id: str) -> str:
     """
     Cancel an appointment given its confirmation ID (e.g. APT-XXXXXX).
     """
@@ -227,7 +231,7 @@ def cancel_existing_appointment(appointment_id: str) -> str:
 
 
 @function_tool
-def reschedule_existing_appointment(
+async def reschedule_existing_appointment(
     appointment_id: str,
     new_date: str,
     new_time: str,
@@ -310,7 +314,11 @@ def create_clinical_agent() -> Agent:
 def prewarm(proc: JobProcess):
     """Preloads Silero VAD ONNX model to avoid event loop stalls when a call connects."""
     try:
-        proc.userdata["vad"] = silero.VAD.load()
+        proc.userdata["vad"] = silero.VAD.load(
+            min_speech_duration=0.1,
+            min_silence_duration=0.6,
+            activation_threshold=0.55,
+        )
         logger.info("Silero VAD successfully prewarmed")
     except Exception as e:
         logger.warning(f"Silero VAD prewarm skipped: {e}")
@@ -346,6 +354,8 @@ async def entrypoint(ctx: JobContext):
         stt=stt,
         tts=tts,
         vad=vad,
+        min_endpointing_delay=0.8,
+        max_endpointing_delay=2.5,
         allow_interruptions=True,
     )
     session = AgentSession(
@@ -354,6 +364,11 @@ async def entrypoint(ctx: JobContext):
         tts=tts,
         vad=vad,
         tools=CLINICAL_TOOLS,
+        min_endpointing_delay=0.8,
+        max_endpointing_delay=2.5,
+        min_interruption_duration=0.6,
+        min_interruption_words=2,
+        resume_false_interruption=True,
         allow_interruptions=True,
     )
 

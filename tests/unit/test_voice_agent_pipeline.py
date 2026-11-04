@@ -22,16 +22,18 @@ def test_agent_instantiation():
     assert len(CLINICAL_TOOLS) == 6
 
 
-def test_clinical_tools_callable():
-    clinic_info = lookup_clinic_information()
+@pytest.mark.asyncio
+async def test_clinical_tools_callable():
+    clinic_info = await lookup_clinic_information()
     assert "Serenity Medical Clinic" in clinic_info
 
-    doc_info = lookup_doctor_information(query="Ahmed")
+    doc_info = await lookup_doctor_information(query="Ahmed")
     assert "Dr. Ahmed Khan" in doc_info
 
 
-def test_tool_availability_execution():
-    avail = check_doctor_availability(
+@pytest.mark.asyncio
+async def test_tool_availability_execution():
+    avail = await check_doctor_availability(
         doctor_id="DOC-001",
         appointment_date="2026-11-04",
         preferred_time="10:00",

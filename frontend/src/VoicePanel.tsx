@@ -15,6 +15,7 @@ export default function VoicePanel({ onOpenCalendar }: VoicePanelProps) {
   const roomRef = useRef<Room | null>(null)
   const audioElements = useRef<HTMLAudioElement[]>([])
   const timerIntervalRef = useRef<number | null>(null)
+  const transcriptStreamRef = useRef<HTMLDivElement | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement | null>(null)
 
   const [connecting, setConnecting] = useState(false)
@@ -28,10 +29,10 @@ export default function VoicePanel({ onOpenCalendar }: VoicePanelProps) {
   const [lines, setLines] = useState<TranscriptLine[]>([])
   const [callEndedAlert, setCallEndedAlert] = useState(false)
 
-  // Auto-scroll transcript to bottom
+  // Auto-scroll transcript container to bottom without scrolling outer window
   useEffect(() => {
-    if (transcriptEndRef.current) {
-      transcriptEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    if (transcriptStreamRef.current) {
+      transcriptStreamRef.current.scrollTop = transcriptStreamRef.current.scrollHeight
     }
   }, [lines])
 
@@ -122,7 +123,13 @@ export default function VoicePanel({ onOpenCalendar }: VoicePanelProps) {
       // 1. Ensure user has granted microphone permission first before connecting
       if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
         try {
-          const testStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          const testStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+          })
           testStream.getTracks().forEach(t => t.stop())
         } catch (micErr: any) {
           throw new Error(
@@ -207,8 +214,12 @@ export default function VoicePanel({ onOpenCalendar }: VoicePanelProps) {
         }
       }
 
-      // 4. Publish microphone audio track to the agent
-      await room.localParticipant.setMicrophoneEnabled(true)
+      // 4. Publish microphone audio track to the agent with acoustic echo cancellation
+      await room.localParticipant.setMicrophoneEnabled(true, {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      })
       setConnected(true)
     } catch (cause) {
       await room?.disconnect().catch(() => undefined)
@@ -383,7 +394,12 @@ export default function VoicePanel({ onOpenCalendar }: VoicePanelProps) {
           </div>
         </div>
 
-        <div className="transcript-stream" aria-live="polite" aria-label="Conversation stream">
+        <div
+          className="transcript-stream"
+          ref={transcriptStreamRef}
+          aria-live="polite"
+          aria-label="Conversation stream"
+        >
           {lines.length === 0 ? (
             <div className="transcript-empty-state">
               <div className="empty-sparkle">✦</div>
