@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     
     # Google Gemini
     GEMINI_API_KEY: str = Field(default="", description="Google Gemini API Key")
-    GEMINI_MODEL: str = "gemini-3.8-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
 
     # Speech-to-Text (STT) Provider
     STT_PROVIDER: Literal["deepgram", "openai", "groq"] = "deepgram"

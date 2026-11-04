@@ -115,6 +115,7 @@ def check_appointment(payload: AvailabilityRequest, db: Session = Depends(get_db
 @router.get("/appointments", response_model=List[AppointmentResponse])
 def list_appointments(
     appointment_date: Optional[date] = None,
+    doctor_id: Optional[str] = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -122,7 +123,9 @@ def list_appointments(
     query = db.query(Appointment)
     if appointment_date:
         query = query.filter_by(appointment_date=appointment_date.isoformat())
-    records = query.order_by(Appointment.created_at.desc()).offset(offset).limit(limit).all()
+    if doctor_id:
+        query = query.filter_by(doctor_id=doctor_id)
+    records = query.order_by(Appointment.appointment_date.asc(), Appointment.start_time.asc()).offset(offset).limit(limit).all()
     service = AppointmentService(db)
     return [service.get_appointment(a.appointment_id) for a in records]
 
@@ -204,9 +207,8 @@ async def create_livekit_token():
             room_join=True,
             room=room_name,
             can_publish=True,
-            can_publish_sources=["microphone"],
-            can_publish_data=False,
             can_subscribe=True,
+            can_publish_data=True,
         ))
         .to_jwt()
     )

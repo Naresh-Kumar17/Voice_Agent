@@ -27,10 +27,12 @@ from livekit.agents import (
     AgentSession,
     AutoSubscribe,
     JobContext,
+    JobProcess,
     WorkerOptions,
     cli,
     function_tool,
 )
+from livekit.agents.voice import room_io
 from livekit.plugins import openai, silero
 
 try:
@@ -79,8 +81,9 @@ def build_llm():
         if not settings.GEMINI_API_KEY:
             raise RuntimeError("LLM_PROVIDER is gemini but GEMINI_API_KEY is not configured")
         model = settings.GEMINI_MODEL
-        if model in ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.0-flash"]:
-            model = "gemini-3.1-flash-lite"
+        # Normalize to ultra-reliable, high-availability Gemini models with verified low TTFT
+        if model in ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]:
+            model = "gemini-3.5-flash-lite"
         logger.info(f"Using Gemini LLM: {model}")
         return openai.LLM(
             model=model,
@@ -136,7 +139,11 @@ def build_tts():
 def build_vad():
     """Loads Silero Voice Activity Detector for barge-in and turn detection."""
     try:
-        return silero.VAD.load()
+        return silero.VAD.load(
+            min_speech_duration=0.1,
+            min_silence_duration=0.6,
+            activation_threshold=0.55,
+        )
     except Exception as e:
         logger.warning(f"Failed to load Silero VAD: {e}")
         return None
@@ -147,7 +154,7 @@ def build_vad():
 # =====================================================================
 
 @function_tool
-def check_doctor_availability(
+async def check_doctor_availability(
     doctor_id: str,
     appointment_date: str,
     preferred_time: Optional[str] = None,
@@ -165,7 +172,7 @@ def check_doctor_availability(
 
 
 @function_tool
-def book_clinical_appointment(
+async def book_clinical_appointment(
     patient_name: str,
     contact_number: str,
     doctor_id: str,
@@ -189,7 +196,7 @@ def book_clinical_appointment(
 
 
 @function_tool
-def lookup_doctor_information(query: Optional[str] = None) -> str:
+async def lookup_doctor_information(query: Optional[str] = None) -> str:
     """
     Retrieve doctors at the clinic and their medical specialties.
     Query can be a doctor's name or medical field (e.g. 'Dermatologist').
@@ -203,7 +210,7 @@ def lookup_doctor_information(query: Optional[str] = None) -> str:
 
 
 @function_tool
-def lookup_clinic_information() -> str:
+async def lookup_clinic_information() -> str:
     """
     Get general clinic administrative information including hours, address, and phone number.
     """
@@ -215,7 +222,7 @@ def lookup_clinic_information() -> str:
 
 
 @function_tool
-def cancel_existing_appointment(appointment_id: str) -> str:
+async def cancel_existing_appointment(appointment_id: str) -> str:
     """
     Cancel an appointment given its confirmation ID (e.g. APT-XXXXXX).
     """
@@ -224,7 +231,7 @@ def cancel_existing_appointment(appointment_id: str) -> str:
 
 
 @function_tool
-def reschedule_existing_appointment(
+async def reschedule_existing_appointment(
     appointment_id: str,
     new_date: str,
     new_time: str,
@@ -251,8 +258,27 @@ CLINICAL_TOOLS = [
 
 
 # =====================================================================
-# Clinical Agent Factory
+# Clinical Agent Class & Factory
 # =====================================================================
+
+class ReceptionistAgent(Agent):
+    """
+    LiveKit Agent for Serenity Medical Clinic receptionist.
+    Handles clinical triage, FAQ answering, doctor scheduling, and natural barge-in.
+    """
+
+    async def on_enter(self) -> None:
+        """
+        Executed automatically when the agent session enters the active activity.
+        Speaks the friendly opening clinic greeting to the caller.
+        """
+        greeting = (
+            f"Hello! Thank you for calling {settings.CLINIC_NAME}. "
+            "I'm Rachel, your AI receptionist. How can I help you today?"
+        )
+        logger.info(f"Rachel speaking opening greeting to caller: {greeting}")
+        self.session.say(greeting)
+
 
 def create_clinical_agent() -> Agent:
     """Factory to create a configured LiveKit Agent with tools and prompts."""
@@ -270,7 +296,7 @@ def create_clinical_agent() -> Agent:
     tts = build_tts()
     vad = build_vad()
 
-    return Agent(
+    return ReceptionistAgent(
         instructions=instructions,
         tools=CLINICAL_TOOLS,
         llm=llm,
@@ -282,28 +308,96 @@ def create_clinical_agent() -> Agent:
 
 
 # =====================================================================
-# LiveKit Worker Entrypoint
+# LiveKit Worker Lifecycle
 # =====================================================================
+
+def prewarm(proc: JobProcess):
+    """Preloads Silero VAD ONNX model to avoid event loop stalls when a call connects."""
+    try:
+        proc.userdata["vad"] = silero.VAD.load(
+            min_speech_duration=0.1,
+            min_silence_duration=0.6,
+            activation_threshold=0.55,
+        )
+        logger.info("Silero VAD successfully prewarmed")
+    except Exception as e:
+        logger.warning(f"Silero VAD prewarm skipped: {e}")
+
 
 async def entrypoint(ctx: JobContext):
     """LiveKit agent worker lifecycle entry point."""
     logger.info(f"Connecting to room: {ctx.room.name}")
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
-    # Wait for the first human participant
-    participant = await ctx.wait_for_participant()
-    logger.info(f"Starting voice session with participant: {participant.identity}")
-
-    agent = create_clinical_agent()
-    session = AgentSession()
-    await session.start(agent, room=ctx.room)
-
-    # Greet patient immediately
-    greeting = (
-        f"Hello! Thank you for calling {settings.CLINIC_NAME}. "
-        "I'm Rachel, your AI receptionist. How can I help you today?"
+    instructions = RECEPTIONIST_SYSTEM_PROMPT.format(
+        clinic_name=settings.CLINIC_NAME,
+        clinic_phone=settings.CLINIC_PHONE,
+        clinic_address=settings.CLINIC_ADDRESS,
+        clinic_opening_time=settings.CLINIC_OPENING_TIME,
+        clinic_closing_time=settings.CLINIC_CLOSING_TIME,
+        clinic_timezone=settings.CLINIC_TIMEZONE,
     )
-    await session.say(greeting)
+    llm = build_llm()
+    stt = build_stt()
+    tts = build_tts()
+
+    vad = None
+    if hasattr(ctx, "proc") and hasattr(ctx.proc, "userdata"):
+        vad = ctx.proc.userdata.get("vad")
+    if vad is None:
+        vad = build_vad()
+
+    agent = ReceptionistAgent(
+        instructions=instructions,
+        tools=CLINICAL_TOOLS,
+        llm=llm,
+        stt=stt,
+        tts=tts,
+        vad=vad,
+        min_endpointing_delay=0.8,
+        max_endpointing_delay=2.5,
+        allow_interruptions=True,
+    )
+    session = AgentSession(
+        stt=stt,
+        llm=llm,
+        tts=tts,
+        vad=vad,
+        tools=CLINICAL_TOOLS,
+        min_endpointing_delay=0.8,
+        max_endpointing_delay=2.5,
+        min_interruption_duration=0.6,
+        min_interruption_words=2,
+        resume_false_interruption=True,
+        allow_interruptions=True,
+    )
+
+    # Start the agent session in the room immediately.
+    # sync_transcription=False bypasses TranscriptSynchronizer's CPU STFT loop,
+    # completely eliminating audio stutter and event loop freezes on Windows.
+    await session.start(
+        agent,
+        room=ctx.room,
+        room_output_options=room_io.RoomOutputOptions(sync_transcription=False),
+    )
+    logger.info(f"Agent session successfully started in room: {ctx.room.name} (STFT bypassed)")
+
+    # Keep worker alive for call duration and cleanly exit when call ends
+    disconnect_future = asyncio.get_running_loop().create_future()
+
+    def _mark_done(*_):
+        if not disconnect_future.done():
+            disconnect_future.set_result(None)
+
+    ctx.room.on("disconnected", _mark_done)
+    ctx.room.on("participant_disconnected", _mark_done)
+    session.on("close", _mark_done)
+
+    try:
+        await disconnect_future
+        logger.info(f"Room {ctx.room.name} call ended, closing agent session.")
+    finally:
+        await session.aclose()
 
 
 def main():
@@ -311,7 +405,9 @@ def main():
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
+            prewarm_fnc=prewarm,
             agent_name=settings.LIVEKIT_AGENT_NAME,
+            load_threshold=10.0,
         )
     )
 
