@@ -131,6 +131,8 @@ def build_tts():
                 api_key=settings.ELEVENLABS_API_KEY,
                 voice_id=voice_id,
                 model=settings.ELEVENLABS_MODEL_ID,
+                streaming_latency=3,
+                chunk_length_schedule=[50, 90, 140, 220],
             )
         except Exception as e:
             logger.warning(f"Failed to load ElevenLabs plugin: {e}, falling back to OpenAI TTS")
@@ -142,8 +144,8 @@ def build_vad():
     """Loads Silero Voice Activity Detector for barge-in and turn detection."""
     try:
         return silero.VAD.load(
-            min_speech_duration=0.1,
-            min_silence_duration=0.6,
+            min_speech_duration=0.08,
+            min_silence_duration=0.35,
             activation_threshold=0.55,
         )
     except Exception as e:
@@ -336,8 +338,8 @@ def prewarm(proc: JobProcess):
     """Preloads Silero VAD ONNX model to avoid event loop stalls when a call connects."""
     try:
         proc.userdata["vad"] = silero.VAD.load(
-            min_speech_duration=0.1,
-            min_silence_duration=0.6,
+            min_speech_duration=0.08,
+            min_silence_duration=0.35,
             activation_threshold=0.55,
         )
         logger.info("Silero VAD successfully prewarmed")
@@ -368,8 +370,8 @@ async def entrypoint(ctx: JobContext):
         stt=stt,
         tts=tts,
         vad=vad,
-        min_endpointing_delay=0.8,
-        max_endpointing_delay=2.5,
+        min_endpointing_delay=0.45,
+        max_endpointing_delay=1.6,
         allow_interruptions=True,
     )
     session = AgentSession(
@@ -378,10 +380,10 @@ async def entrypoint(ctx: JobContext):
         tts=tts,
         vad=vad,
         tools=CLINICAL_TOOLS,
-        min_endpointing_delay=0.8,
-        max_endpointing_delay=2.5,
-        min_interruption_duration=0.6,
-        min_interruption_words=2,
+        min_endpointing_delay=0.45,
+        max_endpointing_delay=1.6,
+        min_interruption_duration=0.4,
+        min_interruption_words=1,
         resume_false_interruption=True,
         allow_interruptions=True,
     )
