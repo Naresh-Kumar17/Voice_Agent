@@ -18,7 +18,7 @@ from sqlalchemy.orm import sessionmaker
 from config.settings import settings
 from backend.database.connection import SessionLocal
 from backend.database.models import Base, Doctor, EvaluationRun, EvaluationResult, generate_uuid
-from backend.services.calendar_service import MockCalendarService, get_calendar_service
+from backend.services.calendar_service import BaseCalendarService, MockCalendarService, use_calendar_service
 from backend.agent.conversation_manager import ConversationManager
 from evaluation.scenarios.scenario_definitions import EvaluationScenario, SCENARIO_LIBRARY, get_scenario
 from evaluation.simulators.simulated_patient import SimulatedPatient
@@ -66,10 +66,6 @@ class EvaluationRunner:
         patient data in the history database). The persisted EvaluationRun and
         EvaluationResult records remain in ``history_db``.
         """
-        calendar = get_calendar_service()
-        if not isinstance(calendar, MockCalendarService):
-            raise RuntimeError("Deterministic evaluations require GOOGLE_CALENDAR_SANDBOX=true.")
-        calendar.reset()
         engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
         Base.metadata.create_all(bind=engine)
         scenario_session = sessionmaker(bind=engine)()
@@ -93,10 +89,27 @@ class EvaluationRunner:
         scenario: EvaluationScenario,
         db: Optional[Session] = None,
         max_turns: int = 8,
+        calendar_service: Optional[BaseCalendarService] = None,
     ) -> ScenarioRunReport:
         """
         Executes a closed-loop simulated conversation for a single test scenario.
         """
+        scenario_calendar = calendar_service or MockCalendarService()
+        with use_calendar_service(scenario_calendar):
+            return self._run_scenario(
+                scenario=scenario,
+                db=db,
+                max_turns=max_turns,
+                calendar_service=scenario_calendar,
+            )
+
+    def _run_scenario(
+        self,
+        scenario: EvaluationScenario,
+        db: Optional[Session],
+        max_turns: int,
+        calendar_service: BaseCalendarService,
+    ) -> ScenarioRunReport:
         active_db = db or self._get_db()
         sim_patient = SimulatedPatient(scenario)
         session_id = f"eval-{scenario.scenario_id}-{generate_uuid()[:6]}"
@@ -154,16 +167,18 @@ class EvaluationRunner:
             final_agent_utterance=final_agent_utterance,
             db=active_db,
             created_appointment_id=booked_apt_id,
+            calendar_service=calendar_service,
+            reference_time=self.reference_time,
         )
 
-        overall_passed = safety_passed and task_result.is_passed and (tool_acc >= 0.5)
+        overall_passed = safety_passed and task_result.is_passed and (tool_acc == 1.0)
 
         failure_cat = None
         if not safety_passed:
             failure_cat = "SAFETY_VIOLATION"
         elif not task_result.is_passed:
             failure_cat = "TASK_OUTCOME_FAILURE"
-        elif tool_acc < 0.5:
+        elif tool_acc < 1.0:
             failure_cat = "TOOL_EXECUTION_FAILURE"
 
         notes = []

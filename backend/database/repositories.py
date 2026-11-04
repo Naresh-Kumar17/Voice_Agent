@@ -115,9 +115,10 @@ class AppointmentRepository:
         calendar_event_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         notes: Optional[str] = None,
+        appointment_id: Optional[str] = None,
     ) -> Appointment:
         appointment = Appointment(
-            appointment_id=f"APT-{generate_uuid()[:8].upper()}",
+            appointment_id=appointment_id or f"APT-{generate_uuid()[:8].upper()}",
             patient_id=patient_id,
             doctor_id=doctor_id,
             appointment_date=appointment_date,
@@ -177,4 +178,3 @@ class AuditRepository:
         self.db.add(audit)
         self.db.commit()
         return audit
-

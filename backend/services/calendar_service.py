@@ -4,9 +4,11 @@ Handles Free/Busy queries, slot calculations, event creation, cancellation, and 
 """
 
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, time, timedelta, timezone
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, Iterator, List, Optional
 import pytz
 
 from config.settings import settings
@@ -47,12 +49,12 @@ class BaseCalendarService(ABC):
     def create_event(
         self,
         doctor_id: str,
-        patient_name: str,
-        contact_number: str,
         date_str: str,
         start_time: str,
         end_time: str,
         summary: str,
+        appointment_id: Optional[str] = None,
+        appointment_type: Optional[str] = None,
     ) -> str:
         """Create calendar event and return calendar_event_id."""
         pass
@@ -111,12 +113,12 @@ class MockCalendarService(BaseCalendarService):
     def create_event(
         self,
         doctor_id: str,
-        patient_name: str,
-        contact_number: str,
         date_str: str,
         start_time: str,
         end_time: str,
         summary: str,
+        appointment_id: Optional[str] = None,
+        appointment_type: Optional[str] = None,
     ) -> str:
         if self.simulate_api_failure:
             raise ConnectionError("Google Calendar API event creation failed (simulated 500)")
@@ -128,8 +130,9 @@ class MockCalendarService(BaseCalendarService):
             "start": start_time,
             "end": end_time,
             "summary": summary,
-            "patient_name": patient_name,
-            "contact_number": contact_number,
+            "appointment_id": appointment_id,
+            "appointment_type": appointment_type,
+            "doctor_id": doctor_id,
         }
         if doctor_id not in self._events:
             self._events[doctor_id] = []
@@ -168,8 +171,12 @@ class GoogleCalendarService(BaseCalendarService):
             from google.oauth2.credentials import Credentials
             from googleapiclient.discovery import build
 
-            if not (settings.GOOGLE_CLIENT_ID and settings.GOOGLE_REFRESH_TOKEN):
-                logger.warning("Google Calendar credentials not fully set, falling back to mock behavior.")
+            if not (
+                settings.GOOGLE_CLIENT_ID
+                and settings.GOOGLE_CLIENT_SECRET
+                and settings.GOOGLE_REFRESH_TOKEN
+            ):
+                logger.error("Google Calendar credentials are incomplete.")
                 return
 
             creds = Credentials(
@@ -187,30 +194,72 @@ class GoogleCalendarService(BaseCalendarService):
 
     def get_busy_intervals(self, doctor_id: str, date_str: str) -> List[Dict[str, str]]:
         if not self._service:
-            logger.warning("Google Calendar service not initialized. Returning empty busy intervals.")
-            return []
+            raise ConnectionError(
+                "Google Calendar is not configured. Set the OAuth client ID, client secret, "
+                "refresh token, and calendar ID before using live scheduling."
+            )
 
         tz = pytz.timezone(settings.CLINIC_TIMEZONE)
-        day_start = tz.localize(datetime.strptime(f"{date_str} 00:00:00", "%Y-%m-%d %H:%M:%S")).isoformat()
-        day_end = tz.localize(datetime.strptime(f"{date_str} 23:59:59", "%Y-%m-%d %H:%M:%S")).isoformat()
-
-        body = {
-            "timeMin": day_start,
-            "timeMax": day_end,
-            "timeZone": settings.CLINIC_TIMEZONE,
-            "items": [{"id": settings.GOOGLE_CALENDAR_ID}],
-        }
-        res = self._service.freebusy().query(body=body).execute()
-        busy_raw = res.get("calendars", {}).get(settings.GOOGLE_CALENDAR_ID, {}).get("busy", [])
+        target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        day_start = tz.localize(datetime.combine(target_date, time.min))
+        day_end = tz.localize(datetime.combine(target_date + timedelta(days=1), time.min))
 
         busy_intervals = []
-        for b in busy_raw:
-            start_dt = datetime.fromisoformat(b["start"]).astimezone(tz)
-            end_dt = datetime.fromisoformat(b["end"]).astimezone(tz)
-            busy_intervals.append({
-                "start": start_dt.strftime("%H:%M"),
-                "end": end_dt.strftime("%H:%M"),
-            })
+        page_token = None
+        while True:
+            response = self._service.events().list(
+                calendarId=settings.GOOGLE_CALENDAR_ID,
+                timeMin=day_start.isoformat(),
+                timeMax=day_end.isoformat(),
+                singleEvents=True,
+                orderBy="startTime",
+                maxResults=2500,
+                pageToken=page_token,
+            ).execute()
+            for event in response.get("items", []):
+                if event.get("status") == "cancelled":
+                    continue
+                event_doctor_id = (
+                    event.get("extendedProperties", {})
+                    .get("private", {})
+                    .get("doctor_id")
+                )
+                # Legacy and manually-created events without a doctor tag remain clinic-wide conflicts.
+                if event_doctor_id and event_doctor_id != doctor_id:
+                    continue
+
+                start_raw = event.get("start", {})
+                end_raw = event.get("end", {})
+                if "date" in start_raw:
+                    event_start = datetime.combine(
+                        datetime.strptime(start_raw["date"], "%Y-%m-%d").date(),
+                        time.min,
+                    )
+                    event_end_date = datetime.strptime(
+                        end_raw.get("date", start_raw["date"]), "%Y-%m-%d"
+                    ).date()
+                    if target_date < event_start.date() or target_date >= event_end_date:
+                        continue
+                    start_dt = day_start
+                    end_dt = day_end
+                else:
+                    start_dt = datetime.fromisoformat(
+                        start_raw["dateTime"].replace("Z", "+00:00")
+                    ).astimezone(tz)
+                    end_dt = datetime.fromisoformat(
+                        end_raw["dateTime"].replace("Z", "+00:00")
+                    ).astimezone(tz)
+                    start_dt = max(start_dt, day_start)
+                    end_dt = min(end_dt, day_end)
+
+                busy_intervals.append({
+                    "start": start_dt.strftime("%H:%M"),
+                    "end": end_dt.strftime("%H:%M"),
+                })
+
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
         return busy_intervals
 
     def get_event(self, doctor_id: str, calendar_event_id: str) -> Optional[Dict[str, str]]:
@@ -231,6 +280,14 @@ class GoogleCalendarService(BaseCalendarService):
         end_raw = event.get("end", {})
         start_text = start_raw.get("dateTime")
         end_text = end_raw.get("dateTime")
+        private_properties = event.get("extendedProperties", {}).get("private", {})
+        event_details = {
+            "event_id": event.get("id", calendar_event_id),
+            "appointment_id": private_properties.get("appointment_id", ""),
+            "appointment_type": private_properties.get("appointment_type", ""),
+            "doctor_id": private_properties.get("doctor_id", ""),
+            "summary": event.get("summary", ""),
+        }
         if start_text and end_text:
             start_dt = datetime.fromisoformat(start_text.replace("Z", "+00:00"))
             end_dt = datetime.fromisoformat(end_text.replace("Z", "+00:00"))
@@ -239,24 +296,29 @@ class GoogleCalendarService(BaseCalendarService):
             if end_dt.tzinfo is None:
                 end_dt = tz.localize(end_dt)
             start_dt, end_dt = start_dt.astimezone(tz), end_dt.astimezone(tz)
-            return {"event_id": event.get("id", calendar_event_id),
-                    "date": start_dt.strftime("%Y-%m-%d"),
-                    "start": start_dt.strftime("%H:%M"), "end": end_dt.strftime("%H:%M"),
-                    "summary": event.get("summary", "")}
+            return {
+                **event_details,
+                "date": start_dt.strftime("%Y-%m-%d"),
+                "start": start_dt.strftime("%H:%M"),
+                "end": end_dt.strftime("%H:%M"),
+            }
         # All-day events cannot be a valid timed appointment; return their date for mismatch detection.
-        return {"event_id": event.get("id", calendar_event_id),
-                "date": start_raw.get("date", ""), "start": "", "end": "",
-                "summary": event.get("summary", "")}
+        return {
+            **event_details,
+            "date": start_raw.get("date", ""),
+            "start": "",
+            "end": "",
+        }
 
     def create_event(
         self,
         doctor_id: str,
-        patient_name: str,
-        contact_number: str,
         date_str: str,
         start_time: str,
         end_time: str,
         summary: str,
+        appointment_id: Optional[str] = None,
+        appointment_type: Optional[str] = None,
     ) -> str:
         if not self._service:
             raise ConnectionError("Google Calendar API is not configured.")
@@ -267,9 +329,20 @@ class GoogleCalendarService(BaseCalendarService):
 
         event_body = {
             "summary": summary,
-            "description": f"Clinical Appointment for {patient_name} (Phone: {contact_number}) with Doctor {doctor_id}",
+            "description": (
+                f"Appointment reference: {appointment_id or 'unassigned'}\n"
+                f"Doctor: {doctor_id}\n"
+                f"Appointment type: {appointment_type or summary}"
+            ),
             "start": {"dateTime": start_iso, "timeZone": tz_str},
             "end": {"dateTime": end_iso, "timeZone": tz_str},
+            "extendedProperties": {
+                "private": {
+                    "doctor_id": doctor_id,
+                    "appointment_id": appointment_id or "",
+                    "appointment_type": appointment_type or "",
+                }
+            },
         }
 
         created = self._service.events().insert(calendarId=settings.GOOGLE_CALENDAR_ID, body=event_body).execute()
@@ -289,14 +362,29 @@ class GoogleCalendarService(BaseCalendarService):
 # Singleton instances
 _mock_calendar_instance = MockCalendarService()
 _google_calendar_instance = None
+_calendar_service_override: ContextVar[Optional[BaseCalendarService]] = ContextVar(
+    "calendar_service_override",
+    default=None,
+)
+
+
+@contextmanager
+def use_calendar_service(service: BaseCalendarService) -> Iterator[None]:
+    token = _calendar_service_override.set(service)
+    try:
+        yield
+    finally:
+        _calendar_service_override.reset(token)
 
 
 def get_calendar_service() -> BaseCalendarService:
     global _google_calendar_instance
+    override = _calendar_service_override.get()
+    if override is not None:
+        return override
     if settings.GOOGLE_CALENDAR_SANDBOX:
         return _mock_calendar_instance
     
     if _google_calendar_instance is None:
         _google_calendar_instance = GoogleCalendarService()
     return _google_calendar_instance
-

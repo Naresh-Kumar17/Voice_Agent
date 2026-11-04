@@ -58,8 +58,6 @@ def test_availability_with_existing_calendar_event(test_db, mock_calendar):
     # Add busy event in calendar at 09:30
     mock_calendar.create_event(
         doctor_id="DOC-TEST-1",
-        patient_name="Existing Patient",
-        contact_number="555-0000",
         date_str="2026-11-03",
         start_time="09:30",
         end_time="10:00",
@@ -188,4 +186,3 @@ def test_reschedule_verifies_new_event_and_removes_old(test_db, mock_calendar):
     assert mock_calendar.get_event("DOC-TEST-1", created.calendar_event_id) is None
     new_event = mock_calendar.get_event("DOC-TEST-1", updated.calendar_event_id)
     assert (new_event["date"], new_event["start"], new_event["end"]) == ("2026-11-04", "09:00", "09:30")
-

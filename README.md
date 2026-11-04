@@ -378,6 +378,20 @@ Copy `.env.example` to `.env` and fill in your API credentials:
 cp .env.example .env
 ```
 
+### Google Calendar (live scheduling)
+The application uses OAuth refresh-token credentials to access one shared clinic calendar. Enable the Google Calendar API in the owning Google Cloud project, create OAuth client credentials, authorize the clinic Google account for Calendar access, and set its refresh token and calendar ID in `.env`. The account must have edit access to the selected calendar.
+
+```ini
+GOOGLE_CALENDAR_SANDBOX=false
+GOOGLE_CLIENT_ID=your_oauth_client_id
+GOOGLE_CLIENT_SECRET=your_oauth_client_secret
+GOOGLE_REFRESH_TOKEN=your_authorized_refresh_token
+GOOGLE_CALENDAR_ID=primary
+CLINIC_TIMEZONE=America/New_York
+```
+
+Keep the OAuth values private and out of source control. The sandbox setting remains `true` in `.env.example` so local runs and automated evaluations do not write to a real clinic calendar. Evaluations use a separate in-memory database and mock calendar even when live mode is enabled. Live events contain the appointment type, reference, doctor, and scheduled time; patient name and phone number are kept in the application database, not the calendar event. Doctor-specific availability is preserved on the shared calendar using private event metadata; untagged legacy events are treated as clinic-wide busy time.
+
 ### 3. Run the Services
 
 **Terminal 1 — API Gateway:**
@@ -429,6 +443,10 @@ ELEVENLABS_MODEL_ID=eleven_turbo_v2_5
 
 # Calendar & Clinic Defaults
 GOOGLE_CALENDAR_SANDBOX=true
+GOOGLE_CLIENT_ID=your_google_oauth_client_id
+GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
+GOOGLE_REFRESH_TOKEN=your_google_oauth_refresh_token
+GOOGLE_CALENDAR_ID=primary
 CLINIC_TIMEZONE=America/New_York
 CLINIC_NAME="Serenity Medical Clinic"
 CLINIC_PHONE="555-019-2834"

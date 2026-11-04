@@ -14,7 +14,7 @@ from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 
 from config.settings import settings
-from backend.database.models import Appointment, Doctor, Patient
+from backend.database.models import Appointment, Doctor, Patient, generate_uuid
 from backend.database.repositories import (
     AppointmentRepository,
     DoctorRepository,
@@ -46,10 +46,22 @@ class AppointmentService:
     def _format_time(self, dt: datetime) -> str:
         return dt.strftime("%H:%M")
 
-    def _verify_event(self, doctor_id: str, event_id: str, date: str, start: str, end: str) -> None:
+    def _verify_event(
+        self,
+        doctor_id: str,
+        event_id: str,
+        date: str,
+        start: str,
+        end: str,
+        appointment_id: str,
+        appointment_type: str,
+    ) -> None:
         event = self.calendar_service.get_event(doctor_id, event_id)
         if not event or any(event.get(key) != value for key, value in
-                            (("date", date), ("start", start), ("end", end))):
+                            (("date", date), ("start", start), ("end", end),
+                             ("appointment_id", appointment_id),
+                             ("appointment_type", appointment_type),
+                             ("doctor_id", doctor_id))):
             raise ConnectionError("Calendar verification failed: the saved event does not match the appointment.")
 
     def _verify_deleted(self, doctor_id: str, event_id: str) -> None:
@@ -239,22 +251,24 @@ class AppointmentService:
         )
 
         # 5. External Calendar Event Creation
-        summary = f"Appointment: {patient.full_name} with {doctor.doctor_name}"
+        appointment_id = f"APT-{generate_uuid()[:8].upper()}"
+        summary = f"{request.appointment_type} - {doctor.doctor_name} - {appointment_id}"
         calendar_event_id = None
         try:
             calendar_event_id = self.calendar_service.create_event(
                 doctor_id=doctor.doctor_id,
-                patient_name=patient.full_name,
-                contact_number=patient.phone_number,
                 date_str=request.appointment_date,
                 start_time=start_time_str,
                 end_time=end_time_str,
                 summary=summary,
+                appointment_id=appointment_id,
+                appointment_type=request.appointment_type,
             )
             if not calendar_event_id:
                 raise ConnectionError("Calendar did not return an event id.")
             self._verify_event(doctor.doctor_id, calendar_event_id,
-                               request.appointment_date, start_time_str, end_time_str)
+                               request.appointment_date, start_time_str, end_time_str,
+                               appointment_id, request.appointment_type)
         except Exception as e:
             logger.error(f"Failed to create Google Calendar event: {e}")
             if calendar_event_id:
@@ -278,6 +292,7 @@ class AppointmentService:
                 calendar_event_id=calendar_event_id,
                 idempotency_key=request.idempotency_key,
                 notes=request.notes,
+                appointment_id=appointment_id,
             )
         except Exception as db_err:
             logger.error(f"DB insertion failed after calendar event created: {db_err}. Reconciling...")
@@ -402,22 +417,23 @@ class AppointmentService:
 
         # Create and verify the replacement before removing the current event.
         old_calendar_event_id = apt.calendar_event_id
-        summary = f"Rescheduled: {patient_name} with {doctor.doctor_name}"
+        summary = f"{apt.appointment_type} - {doctor.doctor_name} - {apt.appointment_id}"
         new_calendar_event_id = None
         try:
             new_calendar_event_id = self.calendar_service.create_event(
                 doctor_id=doctor.doctor_id,
-                patient_name=patient_name,
-                contact_number=phone_number,
                 date_str=new_date,
                 start_time=new_start_str,
                 end_time=new_end_str,
                 summary=summary,
+                appointment_id=apt.appointment_id,
+                appointment_type=apt.appointment_type,
             )
             if not new_calendar_event_id:
                 raise ConnectionError("Calendar did not return an event id.")
             self._verify_event(doctor.doctor_id, new_calendar_event_id,
-                               new_date, new_start_str, new_end_str)
+                               new_date, new_start_str, new_end_str,
+                               apt.appointment_id, apt.appointment_type)
         except Exception as e:
             logger.error(f"Failed to create new calendar event during reschedule: {e}")
             if new_calendar_event_id:
