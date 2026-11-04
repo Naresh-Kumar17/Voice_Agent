@@ -379,7 +379,14 @@ cp .env.example .env
 ```
 
 ### Google Calendar (live scheduling)
-The application uses OAuth refresh-token credentials to access one shared clinic calendar. Enable the Google Calendar API in the owning Google Cloud project, create OAuth client credentials, authorize the clinic Google account for Calendar access, and set its refresh token and calendar ID in `.env`. The account must have edit access to the selected calendar.
+The application uses OAuth refresh-token credentials to access one shared clinic calendar. Set these up in the Google account that owns (or has edit access to) the clinic calendar:
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create or select a project, then open **APIs & Services → Library**, search for **Google Calendar API**, and enable it.
+2. Open **Google Auth Platform** (or **APIs & Services → OAuth consent screen**) and configure the app name, support email, audience, and developer contact. If the audience is **External** and the app is in **Testing**, add the clinic Google account as a test user. Google may expire refresh tokens for external apps left in testing after seven days; a longer-term client deployment may require publishing and Google verification for the requested Calendar scope.
+3. Under **Clients** (or **Credentials → Create credentials → OAuth client ID**), create a **Web application** OAuth client. Add this authorized redirect URI: `https://developers.google.com/oauthplayground`. Copy the client ID and client secret into your local `.env` only.
+4. Open [Google OAuth 2.0 Playground](https://developers.google.com/oauthplayground), select the settings gear, enable **Use your own OAuth credentials**, and enter that client ID and secret. Set access type to **Offline** if shown.
+5. In Step 1, enter the scope `https://www.googleapis.com/auth/calendar`, authorize with the clinic Google account, and grant access. In Step 2, exchange the authorization code for tokens. Copy the **refresh token** into `.env`; do not share or commit it. If no refresh token is returned, revoke this app's access from the Google account's third-party connections and repeat authorization with offline access.
+6. In Google Calendar, open the target calendar's **Settings and sharing → Integrate calendar** and copy its **Calendar ID**. Use `primary` for that account's primary calendar, or the copied ID for a different clinic calendar. The authorizing account must have permission to create and delete events on it.
 
 ```ini
 GOOGLE_CALENDAR_SANDBOX=false
@@ -390,7 +397,7 @@ GOOGLE_CALENDAR_ID=primary
 CLINIC_TIMEZONE=America/New_York
 ```
 
-Keep the OAuth values private and out of source control. The sandbox setting remains `true` in `.env.example` so local runs and automated evaluations do not write to a real clinic calendar. Evaluations use a separate in-memory database and mock calendar even when live mode is enabled. Live events contain the appointment type, reference, doctor, and scheduled time; patient name and phone number are kept in the application database, not the calendar event. Doctor-specific availability is preserved on the shared calendar using private event metadata; untagged legacy events are treated as clinic-wide busy time.
+Keep the OAuth values private and out of source control; `.env` is ignored by Git. After saving the values, restart the backend. Make a test booking, confirm it appears in the shared calendar, then test cancellation and rescheduling before recording. The sandbox setting remains `true` in `.env.example` so local runs and automated evaluations do not write to a real clinic calendar. Evaluations use a separate in-memory database and mock calendar even when live mode is enabled. Live events contain the appointment type, reference, doctor, and scheduled time; patient name and phone number are kept in the application database, not the calendar event. Doctor-specific availability is preserved on the shared calendar using private event metadata; untagged legacy events are treated as clinic-wide busy time.
 
 ### 3. Run the Services
 
