@@ -324,3 +324,49 @@ footer a:hover {
   0%, 100% { opacity: 0.4; transform: scale(0.9); }
   50% { opacity: 1; transform: scale(1.25); }
 }
+
+/* Lumora Liquid Voice Orb Container */
+.lumora-orb-container {
+  margin: 10px auto;
+  display: grid;
+  place-items: center;
+  position: relative;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.lumora-orb-container:hover {
+  transform: scale(1.02);
+}
+
+.orb-center-badge {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 15, 26, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+.orb-status-text {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+}
+
+.lumora-orb-container.listening .orb-status-text {
+  color: var(--neon-emerald);
+}
+
+.lumora-orb-container.connecting .orb-status-text,
+.lumora-orb-container.thinking .orb-status-text {
+  color: var(--neon-purple);
+}
