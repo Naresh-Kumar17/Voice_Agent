@@ -3,6 +3,7 @@ import { Room, RoomEvent, Track, type TranscriptionSegment } from 'livekit-clien
 import { api, type LiveKitCredentials } from './api'
 import LiquidVoiceOrb, { type OrbState } from './LiquidVoiceOrb'
 import AudioSpectrum from './AudioSpectrum'
+import PromptChips from './PromptChips'
 
 export type TranscriptLine = { id: string; speaker: string; text: string; final: boolean; timestamp: string }
 
@@ -187,6 +188,12 @@ export default function VoicePanel() {
           speakerLabel={userSpeaking ? 'You' : agentSpeaking ? 'Rachel' : 'Standby'}
         />
       </div>
+
+      {/* Quick Prompt Voice Suggestion Chips */}
+      <PromptChips
+        activeCall={connected}
+        onSelectPrompt={!connected ? () => void connect() : undefined}
+      />
 
       {/* Kinetic Voice Action Controls */}
       <div className="voice-actions-bar">
