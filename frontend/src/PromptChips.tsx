@@ -74,3 +74,4 @@ export const PromptChips: React.FC<PromptChipsProps> = ({ onSelectPrompt, active
   )
 }
 export default PromptChips
+

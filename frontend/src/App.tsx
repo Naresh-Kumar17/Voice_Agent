@@ -2,8 +2,9 @@ import { useState } from 'react'
 import Dashboard from './Dashboard'
 import VoicePanel from './VoicePanel'
 import DoctorCards from './DoctorCards'
+import LiveCalendarView from './LiveCalendarView'
 
-type Page = 'voice' | 'evaluations'
+type Page = 'voice' | 'calendar' | 'evaluations'
 
 export default function App() {
   const [page, setPage] = useState<Page>('voice')
@@ -42,6 +43,13 @@ export default function App() {
             ✦ Voice Receptionist
           </button>
           <button
+            className={page === 'calendar' ? 'active' : ''}
+            onClick={() => setPage('calendar')}
+            id="tab-calendar"
+          >
+            📅 Live Doctor Calendar
+          </button>
+          <button
             className={page === 'evaluations' ? 'active' : ''}
             onClick={() => setPage('evaluations')}
             id="tab-evals"
@@ -65,27 +73,41 @@ export default function App() {
           <div>
             <span className="eyebrow">
               <span className="eyebrow-dot" />
-              {page === 'voice' ? 'AUTONOMOUS CLINIC RECEPTIONIST' : 'EVALUATION ENGINE & METRICS'}
+              {page === 'voice'
+                ? 'AUTONOMOUS CLINIC RECEPTIONIST'
+                : page === 'calendar'
+                ? 'REAL-TIME CLINIC SCHEDULE & GOOGLE CALENDAR SYNC'
+                : 'EVALUATION ENGINE & METRICS'}
             </span>
             <h1>
               {page === 'voice'
                 ? 'Talk with Rachel, your AI Receptionist.'
+                : page === 'calendar'
+                ? 'Live Doctor Timetables & Booked Appointments.'
                 : 'Autonomous Benchmark & Quality Suite.'}
             </h1>
             <p>
               {page === 'voice'
                 ? 'Speak naturally to check doctor schedules, book or reschedule appointments, and get instant answers about clinic services.'
+                : page === 'calendar'
+                ? 'Real-time visual schedule grid displaying booked appointment slots placed by Rachel, verified against SQLite DB and synchronized with Google Calendar.'
                 : 'Deterministic multi-turn simulated patient evaluations scoring task outcomes, safety guardrails, and tool execution.'}
             </p>
           </div>
         </div>
 
-        {page === 'voice' ? (
+        {page === 'voice' && (
           <>
-            <VoicePanel />
+            <VoicePanel onOpenCalendar={() => setPage('calendar')} />
             <DoctorCards />
           </>
-        ) : (
+        )}
+
+        {page === 'calendar' && (
+          <LiveCalendarView onNavigateToVoice={() => setPage('voice')} />
+        )}
+
+        {page === 'evaluations' && (
           <Dashboard />
         )}
       </main>

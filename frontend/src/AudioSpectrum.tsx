@@ -111,3 +111,4 @@ export const AudioSpectrum: React.FC<AudioSpectrumProps> = ({
   )
 }
 export default AudioSpectrum
+

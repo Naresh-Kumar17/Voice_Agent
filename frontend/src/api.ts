@@ -41,6 +41,22 @@ export type Doctor = {
   working_hours_end: string
 }
 
+export type Appointment = {
+  appointment_id: string
+  patient_id: string
+  patient_name: string
+  contact_number: string
+  doctor_id: string
+  doctor_name: string
+  appointment_date: string
+  start_time: string
+  end_time: string
+  appointment_type: string
+  status: string
+  calendar_event_id?: string | null
+  message?: string
+}
+
 export type LiveKitCredentials = {
   server_url: string
   room_name: string
@@ -62,4 +78,16 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
+}
+
+export async function getAppointments(date?: string, doctorId?: string): Promise<Appointment[]> {
+  const params = new URLSearchParams()
+  if (date) params.append('appointment_date', date)
+  if (doctorId) params.append('doctor_id', doctorId)
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  return api<Appointment[]>(`/api/v1/appointments${qs}`)
+}
+
+export async function getDoctors(): Promise<Doctor[]> {
+  return api<Doctor[]>('/api/v1/doctors')
 }

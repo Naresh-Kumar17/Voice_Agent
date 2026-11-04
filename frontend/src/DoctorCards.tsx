@@ -97,3 +97,4 @@ export const DoctorCards: React.FC<DoctorCardsProps> = ({ onSelectDoctor }) => {
   )
 }
 export default DoctorCards
+

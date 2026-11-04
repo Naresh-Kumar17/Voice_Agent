@@ -7,7 +7,11 @@ import PromptChips from './PromptChips'
 
 export type TranscriptLine = { id: string; speaker: string; text: string; final: boolean; timestamp: string }
 
-export default function VoicePanel() {
+export interface VoicePanelProps {
+  onOpenCalendar?: () => void
+}
+
+export default function VoicePanel({ onOpenCalendar }: VoicePanelProps) {
   const roomRef = useRef<Room | null>(null)
   const audioElements = useRef<HTMLAudioElement[]>([])
   const timerIntervalRef = useRef<number | null>(null)
@@ -22,6 +26,7 @@ export default function VoicePanel() {
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
   const [lines, setLines] = useState<TranscriptLine[]>([])
+  const [callEndedAlert, setCallEndedAlert] = useState(false)
 
   // Auto-scroll transcript to bottom
   useEffect(() => {
@@ -75,6 +80,7 @@ export default function VoicePanel() {
     setAgentSpeaking(false)
     setCallDuration(0)
     setMicMuted(false)
+    setCallEndedAlert(true)
   }, [])
 
   useEffect(() => () => {
@@ -110,6 +116,7 @@ export default function VoicePanel() {
     setConnecting(true)
     setError('')
     setLines([])
+    setCallEndedAlert(false)
     let room: Room | null = null
     try {
       const creds = await api<LiveKitCredentials>('/api/v1/livekit/token', { method: 'POST', body: '{}' })
@@ -123,6 +130,7 @@ export default function VoicePanel() {
         setAgentSpeaking(false)
         audioElements.current.forEach(element => element.remove())
         audioElements.current = []
+        setCallEndedAlert(true)
       })
 
       room.on(RoomEvent.ActiveSpeakersChanged, speakers => {
@@ -281,6 +289,27 @@ export default function VoicePanel() {
         <div className="inline-error" role="alert">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
           <span>{error}</span>
+        </div>
+      )}
+
+      {callEndedAlert && (
+        <div className="call-sync-toast" role="status">
+          <div className="toast-content">
+            <span className="toast-dot" />
+            <span>Call ended: Any scheduled appointment has been verified in the clinic DB and synchronized with Google Calendar.</span>
+          </div>
+          {onOpenCalendar && (
+            <button className="btn-view-cal-toast" onClick={onOpenCalendar}>
+              View Live Doctor Schedule ➔
+            </button>
+          )}
+          <button
+            className="btn-close-toast"
+            onClick={() => setCallEndedAlert(false)}
+            aria-label="Dismiss alert"
+          >
+            ✕
+          </button>
         </div>
       )}
 
