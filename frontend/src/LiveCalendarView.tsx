@@ -68,6 +68,26 @@ export default function LiveCalendarView({ onNavigateToVoice }: LiveCalendarView
     return () => clearInterval(interval)
   }, [autoSync, loadAppointments])
 
+  // Handle escape key and lock body scroll while modal is open
+  useEffect(() => {
+    if (!selectedAppt) return
+
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedAppt(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = originalOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectedAppt])
+
   // Filtered doctors list
   const displayDoctors = useMemo(() => {
     if (selectedDoctorId === 'all') return doctors
