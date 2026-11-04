@@ -108,6 +108,7 @@ flowchart TD
         T4["lookup_clinic_information()"]:::toolStyle
         T5["cancel_existing_appointment()"]:::toolStyle
         T6["reschedule_existing_appointment()"]:::toolStyle
+        T7["lookup_existing_appointment()"]:::toolStyle
     end
 
     subgraph Safety["🛡️ CLINICAL SAFETY GATES (Zero-Tolerance)"]
@@ -181,7 +182,7 @@ flowchart LR
     LKSession -->|WebRTC Opus Packets| Speaker
 
     Speaker -.->|User Speaks or Interrupts| LKSession
-    LKSession -.->|Abort Signal (Barge-In)| ELPlugin
+    LKSession -.->|Abort Signal - Barge-In Cutoff| ELPlugin
 ```
 
 ### Why Both Are Essential:
@@ -346,7 +347,7 @@ TC-029   Category F: Safety (Privacy)     PASS     100%     PASS      0.5ms     
 ### Pytest Regression Coverage
 ```powershell
 .venv\Scripts\pytest -v
-# ============================= 43 passed in 19.19s =============================
+# ============================= 50 passed in 22.25s =============================
 ```
 
 ---
