@@ -33,6 +33,16 @@ from livekit.agents import (
 )
 from livekit.plugins import openai, silero
 
+try:
+    from livekit.plugins import deepgram
+except ImportError:
+    deepgram = None
+
+try:
+    from livekit.plugins import elevenlabs
+except ImportError:
+    elevenlabs = None
+
 from config.settings import settings
 from backend.agent.prompts import RECEPTIONIST_SYSTEM_PROMPT
 from backend.tools.clinical_tools import (
@@ -89,14 +99,13 @@ def build_llm():
 
 def build_stt():
     """Constructs Speech-to-Text provider (Deepgram or OpenAI)."""
-    if settings.STT_PROVIDER == "deepgram" and settings.DEEPGRAM_API_KEY:
+    if settings.STT_PROVIDER == "deepgram" and settings.DEEPGRAM_API_KEY and deepgram is not None:
         try:
-            from livekit.plugins import deepgram
             logger.info("Using Deepgram STT (nova-2-general)")
             return deepgram.STT(
                 api_key=settings.DEEPGRAM_API_KEY,
                 model="nova-2-general",
-                language="en",
+                language="en-US",
             )
         except Exception as e:
             logger.warning(f"Failed to load Deepgram plugin: {e}, falling back to OpenAI STT")
@@ -106,9 +115,8 @@ def build_stt():
 
 def build_tts():
     """Constructs Text-to-Speech provider (ElevenLabs or OpenAI)."""
-    if settings.TTS_PROVIDER == "elevenlabs" and settings.ELEVENLABS_API_KEY:
+    if settings.TTS_PROVIDER == "elevenlabs" and settings.ELEVENLABS_API_KEY and elevenlabs is not None:
         try:
-            from livekit.plugins import elevenlabs
             voice_id = settings.ELEVENLABS_VOICE_ID
             # Rachel (21m00Tcm4TlvDq8ikWAM) requires a paid tier; EXAVITQu4vr4xnSDxMaL (Bella) is free premade
             if voice_id == "21m00Tcm4TlvDq8ikWAM":
@@ -117,7 +125,7 @@ def build_tts():
             return elevenlabs.TTS(
                 api_key=settings.ELEVENLABS_API_KEY,
                 voice_id=voice_id,
-                model_id=settings.ELEVENLABS_MODEL_ID,
+                model=settings.ELEVENLABS_MODEL_ID,
             )
         except Exception as e:
             logger.warning(f"Failed to load ElevenLabs plugin: {e}, falling back to OpenAI TTS")
@@ -287,8 +295,8 @@ async def entrypoint(ctx: JobContext):
     logger.info(f"Starting voice session with participant: {participant.identity}")
 
     agent = create_clinical_agent()
-    session = AgentSession(agent=agent)
-    await session.start(room=ctx.room, participant=participant)
+    session = AgentSession()
+    await session.start(agent, room=ctx.room)
 
     # Greet patient immediately
     greeting = (
