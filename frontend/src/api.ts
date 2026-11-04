@@ -30,6 +30,17 @@ export type EvaluationDetail = EvaluationRun & {
   }>
 }
 
+export type Doctor = {
+  doctor_id: string
+  doctor_name: string
+  specialization: string
+  calendar_id: string
+  timezone: string
+  active_status: boolean
+  working_hours_start: string
+  working_hours_end: string
+}
+
 export type LiveKitCredentials = {
   server_url: string
   room_name: string
