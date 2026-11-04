@@ -4,6 +4,8 @@ import { api, type EvaluationDetail, type EvaluationRun, type EvaluationScenario
 function readTrace(value?: string | null): {
   transcript?: Array<{ speaker: string; text: string }>
   tool_calls?: Array<{ tool: string; params?: Record<string, unknown>; result?: unknown }>
+  notes?: string[]
+  db_state_details?: Record<string, unknown>
 } {
   if (!value) return {}
   try {
@@ -19,6 +21,7 @@ export default function Dashboard() {
   const [selected, setSelected] = useState<EvaluationDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
+  const [runningLabel, setRunningLabel] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL')
   const [error, setError] = useState('')
 
@@ -48,6 +51,11 @@ export default function Dashboard() {
 
   const runSuite = async (scenarioIds?: string[]) => {
     setRunning(true)
+    setRunningLabel(
+      scenarioIds?.length === 1
+        ? `Running ${scenarioIds[0]}…`
+        : `Running ${scenarios.length} scenarios…`,
+    )
     setError('')
     try {
       const result = await api<EvaluationDetail & { reports: unknown[] }>('/api/v1/evaluations/run', {
@@ -61,6 +69,7 @@ export default function Dashboard() {
       setError(cause instanceof Error ? cause.message : 'Evaluation run failed.')
     } finally {
       setRunning(false)
+      setRunningLabel('')
     }
   }
 
@@ -92,7 +101,7 @@ export default function Dashboard() {
             BENCHMARK & CLINICAL SAFETY
           </span>
           <h2 id="dashboard-title">Autonomous Evaluation Engine</h2>
-          <p>Closed-loop simulated patient conversations with ground-truth database verification</p>
+          <p>Run scripted patient scenarios and inspect the conversation, tool calls, and verified results.</p>
         </div>
         <button
           className="button button-call-start"
@@ -103,15 +112,30 @@ export default function Dashboard() {
           {running ? (
             <>
               <span className="spinner" />
-              <span>Simulating 15 Patient Calls…</span>
+              <span>{runningLabel || 'Running evaluation…'}</span>
             </>
           ) : (
             <>
-              <span>▶ Run Full Test Suite (15 Cases)</span>
+              <span>▶ Run Full Test Suite ({scenarios.length} scenarios)</span>
             </>
           )}
         </button>
       </div>
+
+      <div className="evaluation-notice" role="note">
+        <strong>Simulation, not a live phone-call test.</strong>
+        <span>
+          Each scripted scenario runs through the deterministic conversation manager, uses a disposable
+          database and mock calendar, then checks the expected outcome. It does not place calls or write to
+          your Google Calendar.
+        </span>
+      </div>
+
+      <ol className="evaluation-steps" aria-label="What each evaluation verifies">
+        <li><span>1</span><strong>Simulate</strong><small>Patient prompts and agent replies</small></li>
+        <li><span>2</span><strong>Check behavior</strong><small>Safety responses and expected tools</small></li>
+        <li><span>3</span><strong>Verify outcome</strong><small>Database record and mock calendar event</small></li>
+      </ol>
 
       {error && (
         <div className="inline-error" role="alert">
@@ -131,13 +155,13 @@ export default function Dashboard() {
             <article className="metric-card">
               <span className="metric-label">DEFINED SCENARIOS</span>
               <strong className="metric-val">{scenarios.length}</strong>
-              <small className="metric-sub">Categories A–F across PRD</small>
+              <small className="metric-sub">Available deterministic scenarios</small>
             </article>
 
             <article className="metric-card">
               <span className="metric-label">EVALUATION RUNS</span>
               <strong className="metric-val">{runs.length}</strong>
-              <small className="metric-sub">Persisted run records</small>
+              <small className="metric-sub">Saved tester executions</small>
             </article>
 
             <article className="metric-card highlight">
@@ -146,7 +170,9 @@ export default function Dashboard() {
                 {successRate === null ? '—' : `${successRate}%`}
               </strong>
               <small className="metric-sub">
-                {selected ? `${selected.passed_scenarios} of ${selected.total_scenarios} passed` : 'Select a run'}
+                {selected
+                  ? `${selected.passed_scenarios} passed · ${selected.failed_scenarios} failed`
+                  : 'Select a run'}
               </small>
             </article>
           </div>
@@ -156,7 +182,7 @@ export default function Dashboard() {
             {/* Left: Saved Runs */}
             <div className="panel lumora-panel">
               <div className="panel-heading">
-                <h3>Evaluation History</h3>
+                <h3>Previous Test Runs</h3>
                 <button className="text-button" onClick={() => void refresh()}>
                   ↻ Refresh
                 </button>
@@ -178,7 +204,7 @@ export default function Dashboard() {
                           <small>{new Date(run.started_at).toLocaleString()}</small>
                         </span>
                         <span className="run-score">
-                          {run.passed_scenarios} / {run.total_scenarios}
+                          {run.passed_scenarios} / {run.total_scenarios} passed
                         </span>
                       </button>
                     </li>
@@ -190,7 +216,7 @@ export default function Dashboard() {
             {/* Right: Inspector */}
             <div className="panel lumora-panel inspector">
               <div className="panel-heading">
-                <h3>Run Inspector</h3>
+                <h3>Selected Run Results</h3>
                 {selected && (
                   <span className={`status-label ${selected.execution_status.toLowerCase()}`}>
                     {selected.execution_status}
@@ -217,10 +243,10 @@ export default function Dashboard() {
 
                         <div className="result-metrics">
                           <span className={result.task_completion ? 'metric-ok' : 'metric-fail'}>
-                            Task: {result.task_completion ? '✓ Pass' : '✕ Fail'}
+                            Outcome: {result.task_completion ? '✓ Verified' : '✕ Failed'}
                           </span>
                           <span className="metric-info">
-                            Tools: {Math.round(result.tool_accuracy * 100)}%
+                            Expected tools: {Math.round(result.tool_accuracy * 100)}%
                           </span>
                           <span className={result.safety_result ? 'metric-ok' : 'metric-fail'}>
                             Safety: {result.safety_result ? '✓ Compliant' : '✕ Violated'}
@@ -231,9 +257,31 @@ export default function Dashboard() {
                           <small className="failure-category">Reason: {result.failure_category}</small>
                         )}
 
+                        {trace.db_state_details && Object.keys(trace.db_state_details).length > 0 && (
+                          <div className="verified-details">
+                            <strong>Verified test data</strong>
+                            <dl>
+                              {Object.entries(trace.db_state_details).map(([key, value]) => (
+                                <div key={key}>
+                                  <dt>{key.replaceAll('_', ' ')}</dt>
+                                  <dd>{typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+                                    ? String(value)
+                                    : JSON.stringify(value)}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </div>
+                        )}
+
+                        {trace.notes && trace.notes.length > 0 && (
+                          <ul className="evaluation-notes">
+                            {trace.notes.map((note, index) => <li key={`${result.scenario_id}-note-${index}`}>{note}</li>)}
+                          </ul>
+                        )}
+
                         {(trace.transcript?.length || trace.tool_calls?.length) && (
                           <details className="trace-details">
-                            <summary>View Multi-Turn Dialogue & Tool Calls</summary>
+                            <summary>Inspect simulated dialogue & tool calls</summary>
                             <div className="trace-content">
                               {trace.transcript?.map((turn, index) => (
                                 <p className="trace-turn" key={`${turn.speaker}-${index}`}>
@@ -242,7 +290,8 @@ export default function Dashboard() {
                               ))}
                               {trace.tool_calls?.map((call, index) => (
                                 <p className="trace-tool" key={`${call.tool}-${index}`}>
-                                  ⚙️ Tool: <strong>{call.tool}</strong> · params: {JSON.stringify(call.params || {})}
+                                  ⚙️ Tool: <strong>{call.tool}</strong> · inputs: {JSON.stringify(call.params || {})}
+                                  {call.result !== undefined && <> · result: {JSON.stringify(call.result)}</>}
                                 </p>
                               ))}
                             </div>
@@ -259,18 +308,22 @@ export default function Dashboard() {
           {/* Scenario Library Explorer */}
           <div className="scenario-library-box">
             <div className="library-header">
-              <span className="eyebrow">
+              <div>
+                <span className="eyebrow">
                 <span className="eyebrow-dot" />
-                SCENARIO BENCHMARK LIBRARY
-              </span>
+                  TEST SCENARIOS
+                </span>
+                <p className="library-description">Choose one scripted case or run the complete suite. These do not place real calls or calendar bookings.</p>
+              </div>
               <div className="filter-pills">
                 {categories.map(cat => (
                   <button
                     key={cat}
                     className={`filter-pill ${categoryFilter === cat ? 'active' : ''}`}
                     onClick={() => setCategoryFilter(cat)}
+                    aria-pressed={categoryFilter === cat}
                   >
-                    {cat}
+                    {cat === 'ALL' ? `All (${scenarios.length})` : cat.replace(/^Category [A-Z]: /, '')}
                   </button>
                 ))}
               </div>
@@ -284,16 +337,17 @@ export default function Dashboard() {
                       {sc.scenario_id} · {sc.name}
                     </strong>
                     <small className="scenario-cat">
-                      Category: {sc.category} | Expected: {sc.expected_outcome}
+                      {sc.category} · Expected outcome: {sc.expected_outcome}
                       {sc.is_safety_critical && <span className="safety-tag">Safety Critical</span>}
                     </small>
+                    <p className="scenario-description">{sc.description}</p>
                   </div>
                   <button
                     className="button button-run-single"
                     disabled={running}
                     onClick={() => void runSuite([sc.scenario_id])}
                   >
-                    Run Test
+                    {running ? 'Running…' : 'Run scenario'}
                   </button>
                 </li>
               ))}
